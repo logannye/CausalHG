@@ -1,4 +1,4 @@
-# Causal Hypergraph Project
+# Causal Hypergraphs
 
 A working repository for the formal development of **Causal Hypergraph SCMs** — a strict generalization of Pearl's structural causal models in which mechanisms (hyperedges) are first-class causal objects, intervenable in their own right.
 
