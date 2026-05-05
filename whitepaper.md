@@ -6,7 +6,7 @@
 
 We develop a strict generalization of Pearl's structural causal models in which mechanisms — typed hyperedges with multiple inputs and multiple jointly-produced outputs — are first-class causal objects. The framework is motivated by domains where Pearl's three structural assumptions (single-output equations, dyadic edges, node-level DAG) fail to faithfully capture the underlying causal structure: chemical reactions with stoichiometric coupling, regulatory pathways, n-ary knowledge-base relations, and multi-target therapeutic interventions.
 
-The contribution is not new expressive power — Pearl with sufficient latents is universal — but **first-class addressability** of mechanisms, which strictly extends the intervention vocabulary and yields a substantively different identifiability theory. We prove three foundational results: a graphical Markov property via a bipartite-blowup construction (T1), a mechanism-level chain rule yielding identifiability of mechanism deletion and replacement under causal sufficiency (T2, T3), and an asymmetry between mechanism-level and variable-level interventions in the presence of hidden mechanisms (T4) — mechanism deletion is *always identifiable* under standard noise-independence assumptions, with no analogue of Pearl's hedge obstruction. We extend the asymmetry to hidden-variable HADMGs under a clean boundary condition (T6), and reduce the boundary-violating case to standard Pearl ADMG identification on the bipartite blowup (T7).
+The contribution is not new expressive power — Pearl with sufficient latents is universal — but **first-class addressability** of mechanisms, which strictly extends the intervention vocabulary and yields closed-form identifiers where Pearl's translation requires multi-variable case analysis. We prove three foundational results: a graphical Markov property via a bipartite-blowup construction (T1), a mechanism-level chain rule yielding identifiability of mechanism deletion and replacement under causal sufficiency (T2, T3), and an asymmetry between mechanism-level and variable-level interventions in the presence of hidden mechanisms (T4) — mechanism deletion admits a single closed-form identifier under standard noise-independence assumptions, requiring no Pearl-style hedge analysis. We extend this to hidden-variable HADMGs under a clean boundary condition (T6), and reduce the boundary-violating case to standard Pearl ADMG identification on the bipartite blowup (T7), where genuine unidentifiability via a hyper-hedge becomes possible.
 
 The principal open conjecture is the completeness of a hyper-hedge characterization for boundary-violating mechanism deletions. A reference implementation reproduces every numerical claim to within sampling tolerance and is available in the supplementary material.
 
@@ -38,7 +38,7 @@ Three results form the technical core:
 
 - **A mechanism-level identifiability calculus** (Lemma 1.1, Theorems T2/T3). Mechanism interventions admit truncated factorization formulas: $P(V \mid \mathrm{do}(\neg m^\star)) = P(V) / P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)) \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v)$ under causal sufficiency. The mechanism factor $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ — the joint conditional of a mechanism's outputs given its inputs — generalizes Pearl's parental factor.
 
-- **An asymmetry between mechanism and variable interventions** (Theorem T4). In a hypergraph ADMG (HADMG) with all variables observed, mechanism deletion is *always identifiable* from observational data, even in the presence of hidden mechanisms. There is no analogue of Pearl's hedge obstruction. By contrast, variable interventions on the same HADMG remain subject to the Shpitser-Pearl 2006 hedge criterion (Theorem T5). This asymmetry — mechanism-level interventions are strictly easier to identify than variable-level interventions — is the framework's principal formal claim.
+- **An asymmetry between mechanism and variable interventions** (Theorem T4). In a hypergraph ADMG (HADMG) with all variables observed, mechanism deletion admits a closed-form identifier from observational data, even in the presence of hidden mechanisms. By contrast, variable interventions reduce (Theorem T5) to Pearl multi-variable ID on the bipartite blowup — case-analytic rather than uniform. Under hidden *variables* (§7) the asymmetry sharpens further: T6 closes the observed-boundary case in closed form, and only T7's boundary-violating case can genuinely fail via a hyper-hedge.
 
 Theorem T6 extends T4 to hidden-variable HADMGs under a clean boundary condition. Theorem T7 reduces the boundary-violating case to standard Pearl ADMG identification. The completeness of a corresponding hyper-hedge characterization is stated as the principal remaining open conjecture.
 
@@ -185,9 +185,9 @@ $$
 
 ### 5.4 What this gives, and why mechanism-level is *more* identifiable than Pearl multi-variable
 
-T2 and T3 are clean truncated-factorization formulas, mathematically simple but substantively important. The Pearl analogue of $\mathrm{do}(\neg m^\star)$ is the *simultaneous* multi-variable intervention $\mathrm{do}(v_1 = c_1, \ldots, v_p = c_p)$ for $\{v_1, \ldots, v_p\} = \mathrm{out}(m^\star)$, with $(c_1, \ldots, c_p)$ drawn from $\prod P_0$. Multi-variable interventions in Pearl have stricter identifiability conditions than single-variable ones (Tian-Pearl 2002 §4); the hypergraph framework treats $\mathrm{do}(\neg m^\star)$ as a *single* operation and therefore makes it identifiable under the *same* conditions as variable interventions.
+T2 and T3 are clean truncated-factorization formulas, mathematically simple but substantively important. The Pearl analogue of $\mathrm{do}(\neg m^\star)$ is the *stochastic multi-variable* intervention $\mathrm{do}\!\left(\mathrm{out}(m^\star) \sim \prod P_0\right)$, which under Pearl ADMG ID reduces to a multi-variable ID problem with case-analytic output (Bareinboim-Pearl 2016). The hypergraph framework, by contrast, treats $\mathrm{do}(\neg m^\star)$ as a *single* operation and gives it a closed-form identifier read directly from Lemma 1.1.
 
-This is the first technical observation that the framework's identifiability theory differs from Pearl's at the mechanism level, despite agreeing at the variable level. It anticipates the stronger asymmetry of T4.
+This is the first technical observation that mechanism-level identification is structurally simpler than its Pearl translation: a single expression replaces an algorithmic search. It anticipates the closed-form-vs-case-analytic asymmetry of T4.
 
 ---
 
@@ -211,23 +211,27 @@ and this is identifiable from $P(V)$.
 
 ### 6.3 The asymmetry, made precise
 
-Pearl's analogous identifiability question — when is $P(V \mid \mathrm{do}(X = x))$ identifiable in a Pearl ADMG with latent confounders — has the non-trivial answer of Shpitser-Pearl 2006: identifiable iff no hedge for $(X, V \setminus X)$ exists in the ADMG. Hedges are NP-hard to verify in adversarial cases and obstruct identifiability for many natural queries. T4 says: in the hypergraph framework, the analogous question for mechanism deletion has a *trivial* positive answer.
+The asymmetry between T4 and T5 has two distinct components, which we separate carefully.
 
-| Intervention type | Identifiability under hidden mechanisms |
+| Intervention type | Identifying expression under v1 + $V^{\mathrm{lat}} = \emptyset$ |
 |---|---|
-| $\mathrm{do}(v = x)$ — variable | Pearl hedge criterion via $B^\dagger(\mathcal{M})$ — non-trivial, may fail |
-| $\mathrm{do}(\neg m)$ — mechanism deletion | **Always identifiable** (T4) |
-| $\mathrm{do}(m \to m')$ — mechanism replacement | **Always identifiable** (T4 + T3) |
+| $\mathrm{do}(\neg m)$ — mechanism deletion | **Closed form (T4):** $P(V) / P(\mathrm{out}(m) \mid \mathrm{in}(m)) \cdot \prod P_0$. Always identifiable; $O(\lvert V \rvert + \lvert E \rvert)$. |
+| $\mathrm{do}(m \to m')$ — mechanism replacement | **Closed form (T3 + T4):** same denominator, replacement factor in numerator. |
+| $\mathrm{do}(v = x)$ — variable intervention | **Reduction (T5):** Pearl multi-variable ID on $B^\dagger(\mathcal{M})$. |
 
-The structural reason is that mechanism-level interventions act at the level where the chain rule already factorizes. Pearl variable interventions cut a *single structural equation* and require accounting for back-door paths through latents; hypergraph mechanism interventions cut a *whole mechanism factor*, where confounding is already integrated out by Lemma 1.1.
+**(a) Closed-form vs case-analytic.** Mechanism interventions admit a single explicit identifying formula readable directly from the chain rule. Variable interventions require running Pearl's ID algorithm on the bipartite blowup; the algorithm always terminates, but its output is case-analytic.
+
+**(b) Robustness to hidden mechanisms.** T4's formula is invariant to whether $m^\star$ is observed or latent — only the typed incidence is needed. Variable-intervention identifiability via T5 depends on the specific bidirected-edge structure induced by latent mechanisms in $B^\dagger(\mathcal{M})$.
+
+A natural further question is whether T5 ever returns *unidentifiable* on a HADMG satisfying v1 conventions. Under HSCM intervention semantics, $\mathrm{do}(v=x)$ deletes the mechanism producing $v$ and orphans its siblings to $P_0$; this corresponds in $B^\dagger(\mathcal{M})$ to a multi-variable intervention spanning the entire output set, which severs all bidirected edges that the producing latent mechanism would otherwise contribute. We have not been able to exhibit a v1 HADMG on which a variable intervention is genuinely unidentifiable, and we conjecture none exist — but state this as observation rather than theorem. The asymmetry's strongest form, where mechanism deletion succeeds and variable intervention genuinely fails, is the hidden-variable setting (T7) treated in §7.
 
 ### 6.4 The construction-vs-discovery objection
 
 A skeptical reading: T4's positive result is a consequence of how mechanisms are defined to factorize cleanly in Lemma 1.1. The asymmetry is by construction, not by discovery.
 
-The reply is that this is *exactly* the contribution. Naming mechanisms as first-class causal objects is the modeling choice; the chain-rule factorization is its consequence; the identifiability gain is the epistemic payoff. The point is not that mechanism-level identifiability is *secretly* easier — it is that committing to mechanisms-as-primary makes a class of natural queries (knock out an enzyme, ablate a regulatory program, replace a drug class) identifiable from observational data in cases where the Pearl translation requires multi-variable hedge analysis.
+The reply is that this is *exactly* the contribution. Naming mechanisms as first-class causal objects is the modeling choice; the chain-rule factorization is its consequence; the identifiability gain is the epistemic payoff — the closed-form identifier of T4 and the experimentally faithful intervention vocabulary. The point is not that the hypergraph framework identifies queries Pearl cannot identify (under v1 conventions, both formalisms reach the same answer), but that the hypergraph framework presents a single physical experiment as a single intervention object rather than a multi-variable translation.
 
-The empirical content is non-trivial: a single physical experiment ablating one enzyme corresponds to a single $\mathrm{do}(\neg m)$ in the hypergraph framework but a multi-variable $\mathrm{do}$ in Pearl. The frameworks agree on the resulting distribution but disagree on the *structure of the experiment*. The hypergraph framework's structure matches the experimental reality.
+The empirical content is non-trivial: a single drug ablation corresponds to one $\mathrm{do}(\neg m)$ in the hypergraph framework versus a multi-variable $\mathrm{do}$ in Pearl. The two frameworks agree on the resulting distribution but disagree on the *structure of the experiment*. The hypergraph framework's structure matches experimental reality.
 
 ### 6.5 Theorem T5: variable interventions reduce to Pearl
 
@@ -362,7 +366,7 @@ A direction connecting the framework to hypergraph machine learning. AllSet (Chi
 
 ## 10. Conclusion
 
-We have developed a strict generalization of Pearl's structural causal models in which mechanisms — typed hyperedges — are first-class causal objects. The framework retains all of Pearl's expressive power and adds two new intervention operations: mechanism deletion and mechanism replacement. The principal formal claim is the asymmetry of Theorem T4 and its hidden-variable extension T6: mechanism-level interventions are *strictly easier to identify* than Pearl variable-level interventions, because they act at the level where the chain rule already factorizes. Pearl's hedge obstruction has no mechanism-level analogue under v1 conventions; only the boundary-violating case (T7) requires Pearl's machinery, applied via the bipartite blowup.
+We have developed a strict generalization of Pearl's structural causal models in which mechanisms — typed hyperedges — are first-class causal objects. The framework retains all of Pearl's expressive power and adds two new intervention operations: mechanism deletion and mechanism replacement. The principal formal claim is the asymmetry of Theorem T4 and its hidden-variable extension T6: mechanism-level interventions admit a *closed-form identifier* read directly from the chain-rule factorization, while variable interventions reduce to Pearl multi-variable ID on the bipartite blowup. Under v1 conventions both interventions are likely identifiable in concrete cases; the asymmetry is closed-form-vs-case-analytic, not identifiable-vs-not. Under hidden variables it sharpens — T6 closes the observed-boundary case cleanly, while only T7's boundary-violating case (governed by the hyper-hedge) can genuinely fail.
 
 The framework's value proposition is therefore not new expressive power but **first-class addressability**. Naming mechanisms as primary causal objects matches the structure of natural experiments (drug ablation, pathway knockout, n-ary policy intervention), simplifies the identifiability theory for those experiments, and unifies operations that Pearl can express only as multi-variable interventions or via latent-variable encoding.
 

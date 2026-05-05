@@ -188,6 +188,8 @@ where $d^*$-separation in $B(\mathcal{M})$ is standard Pearl d-separation with c
 
 **Implementation.** A reference d*-separation algorithm is provided in `minimal_model/dseparation.py`; T1's predictions on the worked example are verified by `minimal_model/test_dseparation.py` (12 tests passing, including the deterministic-augmentation case $A \perp D \mid C$).
 
+The reference implementation computes $\mathrm{Det}_{\mathcal{M}}(Z)$ via the **output-equality subcase** of functional determination: each mechanism may declare `output_equalities` — tuples of outputs that are structurally equal under $f_m$ — and the closure propagates equality through these declared groups. This handles the worked example (where $C \equiv D$ via $m_1$) and any joint mechanism whose joint output is supported on a coordinate-equality manifold. The fully general functional-determination closure of §10 — covering, e.g., a mechanism whose output is a deterministic function of its inputs alone, with no noise dependence — is a strict superset of what `dseparation.py` infers automatically; on such cases the user must declare the equality explicitly. This is sufficient for v1's scope and a documented v2 extension point.
+
 ---
 
 ## 11. Catalogued alternatives (post-v1 work)

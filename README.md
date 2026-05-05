@@ -79,7 +79,7 @@ No dependencies beyond NumPy. **60/60 tests passing.**
 
 - **Lemma 1.1 (Mechanism-level chain rule), T2 (mechanism-deletion truncated factorization), T3 (mechanism replacement).** `THEOREM_T2_T3.md`. Under causal sufficiency and v1 conventions C1–C4, mechanism-level interventions are identifiable.
 
-- **T4 (Mechanism-deletion identifiability under hidden mechanisms).** `THEOREM_T4_T5.md`. The headline H1 result: under v1 + all-variables-observed, $\mathrm{do}(\neg m^\star)$ is **always identifiable** — for both observed and latent target mechanisms — via $P(V) / P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)) \cdot \prod P_0$. Surprising compared to Pearl: variable interventions can be unidentifiable due to hedges; mechanism interventions cannot, because they act at the level where the chain rule already factorizes.
+- **T4 (Mechanism-deletion identifiability under hidden mechanisms).** `THEOREM_T4_T5.md`. Under v1 + all-variables-observed, $\mathrm{do}(\neg m^\star)$ is identifiable in closed form — for both observed and latent target mechanisms — via $P(V) / P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)) \cdot \prod P_0$. The formula is uniform in $m^\star$'s observability and requires no Pearl-style hedge search; it reads off the chain-rule factorization directly.
 
 - **T5 (Variable-intervention reduction).** `THEOREM_T4_T5.md`. Variable interventions on a HADMG reduce to standard Pearl ADMG identification on the bipartite blowup; the Shpitser-Pearl hedge criterion applies directly.
 
@@ -89,13 +89,15 @@ No dependencies beyond NumPy. **60/60 tests passing.**
 
 ## The asymmetry (T4 + T5)
 
-| Intervention | Identifiability under hidden mechanisms |
+| Intervention | Identifying expression under v1 + $V^{\mathrm{lat}} = \emptyset$ |
 |---|---|
-| $\mathrm{do}(v = x)$ — variable | Pearl hedge criterion via $B^\dagger(\mathcal{M})$ — non-trivial, may fail |
-| $\mathrm{do}(\neg m)$ — mechanism deletion | **Always identifiable** under v1 (T4) |
-| $\mathrm{do}(m \to m')$ — mechanism replacement | **Always identifiable** under v1 (T4 + T3) |
+| $\mathrm{do}(\neg m)$ — mechanism deletion | **Closed form (T4):** $P(V) / P(\mathrm{out}(m) \mid \mathrm{in}(m)) \cdot \prod P_0$. Always identifiable; $O(\lvert V \rvert + \lvert E \rvert)$. |
+| $\mathrm{do}(m \to m')$ — mechanism replacement | **Closed form (T3 + T4):** same denominator, replacement factor in numerator. |
+| $\mathrm{do}(v = x)$ — variable intervention | **Reduces (T5)** to Pearl multi-variable ID on $B^\dagger(\mathcal{M})$ — Pearl machinery applies verbatim. |
 
-Mechanism-level interventions are strictly easier to identify than Pearl variable interventions. This is the strongest formal argument for the framework's value.
+The asymmetry has two components: (i) **closed-form vs case-analytic** — mechanism interventions admit a single identifying formula readable from the chain rule, while variable interventions require running Pearl's ID algorithm on the bipartite blowup; (ii) **robustness to hidden mechanisms** — T4's formula needs only the typed incidence of $m^\star$, regardless of whether $m^\star$ is observed or latent. Under hidden *variables* (`THEOREM_H1_PLUS.md`), the asymmetry sharpens: T6 closes the observed-boundary case in closed form, while T7's boundary-violating case can genuinely fail via a hyper-hedge.
+
+The framework's value proposition is therefore not new identifiability where Pearl's machinery fails, but (i) a closed-form identifier requiring no search, (ii) an intervention vocabulary that matches experimental practice (one drug ablation = one $\mathrm{do}(\neg m)$, not a multi-variable Pearl translation), and (iii) under hidden variables, a clean sufficient condition that bypasses hyper-hedge analysis.
 
 ## Open theorems
 

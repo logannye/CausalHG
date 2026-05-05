@@ -90,32 +90,21 @@ Hence: **mechanism-level interventions are identifiable under causal sufficiency
 
 ---
 
-## 5. The principal open problem: identifiability under hidden mechanisms
+## 5. Beyond causal sufficiency
 
-When *not* causally sufficient — when there exist unobserved mechanisms $m^{\mathrm{lat}}$ in the true generative model — Lemma 1.1 fails to give clean factors. Two distinct failure modes arise, only one of which has a Pearl analogue:
+Causal sufficiency is restrictive. Two natural relaxations are interesting:
 
-### 5.1 Hidden-mechanism confounding (Pearl-analogous)
+### 5.1 Hidden mechanisms (developed in `THEOREM_T4_T5.md`)
 
-A latent mechanism $m^{\mathrm{lat}}$ with outputs in $V$ creates the standard form of confounding: $P(\mathrm{out}(m) \mid \mathrm{in}(m))$ no longer equals the observational conditional. Pearl's ID algorithm (Tian-Pearl 2002, Shpitser-Pearl 2006) generalizes to this setting via a hypergraph analogue of the *hedge* obstruction. **Conjecture H1.** A hypergraph ID algorithm with hedge-obstruction completeness exists and is computable in polynomial time on $|V| + |E|$.
+When some mechanisms in the true generative model are unobserved — their typed incidence known but their structural functions unknown — Lemma 1.1 still applies (its proof uses only C1–C4 and noise independence; it does not require observability of $f_m$). The mechanism factor $P(\mathrm{out}(m) \mid \mathrm{in}(m))$ remains a conditional in the observational distribution and is therefore directly observable. This is the content of T4 (`THEOREM_T4_T5.md` §1): mechanism-deletion identifiability extends verbatim to HADMGs with $V^{\mathrm{lat}} = \emptyset$. Identifiability under additionally hidden *variables* is treated by T6/T7 in `THEOREM_H1_PLUS.md`, with the hyper-hedge completeness conjecture as the principal open problem.
 
-### 5.2 Mechanism-correlated noise (new — no Pearl analogue)
+### 5.2 Mechanism-correlated noise (retracted as a strict-dominance claim)
 
-Even with no latent mechanism, the noise terms $\{u_m\}$ may be correlated in reality (e.g., shared environmental fluctuation, common stochastic input). The independence assumption $u_{m_1} \perp u_{m_2}$ is part of v1 (convention C2 spirit) but is empirically violatable.
+The independence assumption $u_{m_1} \perp u_{m_2}$ for $m_1 \neq m_2$ is part of v1 (in the spirit of C2) but is empirically violatable: shared environmental fluctuation or common stochastic input can correlate the noise terms of distinct mechanisms.
 
-This form of confounding is **strictly hypergraphic**: in a Pearl SCM with single-output equations, noise correlation between distinct equations is mathematically equivalent to a latent common cause (which can always be made explicit). In a hypergraph SCM with joint mechanisms, noise correlation between *different mechanisms* cannot be reduced to a latent variable — it is a constraint at the *mechanism level*, not the variable level.
+An earlier draft of this document conjectured (**H2**) that mechanism-correlated noise generates conditional independencies inexpressible by *any* finite-latent Pearl SCM, and that the hypergraph framework would therefore have strictly greater representational capacity than Pearl-with-latents. **We retract this conjecture.** Pearl with sufficient latents is universal at both the distributional and interventional level (any joint distribution and any interventional query realized by an HSCM with correlated mechanism noise is realized by some Pearl SCM with appropriately introduced latent common causes). A salvageable reframing as a *complexity-theoretic* separation — that the smallest matching Pearl SCM has size exponential in $|V|$ or $|E|$ — is conceivable but lacks a candidate construction; we do not pursue it.
 
-**Conjecture H2.** Mechanism-correlated noise generates conditional independencies in $P^{\mathcal{M}}$ that cannot be captured by *any* enlarged Pearl SCM with finitely many additional latent variables. The hypergraph framework is the minimal formalism in which this constraint is expressible.
-
-If H2 holds, the hypergraph framework's contribution is not just notational convenience but **strictly greater representational capacity at the level of identifiable structure**.
-
-### 5.3 Identifiability with mechanism-correlated noise
-
-Under hidden-mechanism *and* mechanism-correlated-noise confounding, identifiability becomes a richer problem with — to our knowledge — no analog in the Pearl literature. The conjectured resolution is a two-tier identifiability theory:
-
-- Tier 1 (standard): a hedge-obstruction criterion analogous to Shpitser-Pearl, addressing latent mechanisms.
-- Tier 2 (new): a *correlation criterion* on mechanism-noise covariances, addressing mechanism-correlated noise.
-
-Developing these is the principal theoretical work remaining in the project. The v1 implementation handles only the causally-sufficient case (Tier 0).
+What remains true is a modeling-ergonomic point rather than a representational one: when noise is naturally correlated *across mechanisms*, the hypergraph formalism keeps the correlation at the level where the experimentalist actually reasons about it (the mechanism), whereas a Pearl encoding must introduce an auxiliary latent and then strip it away in interpretation. T4's clean closed form requires noise independence; under correlated mechanism noise, identification becomes an instance of standard hidden-confounder analysis on a Pearl ADMG obtained from the bipartite blowup, with no special hypergraph machinery needed.
 
 ---
 
@@ -155,11 +144,13 @@ This matches direct simulation of $\mathcal{M}^{\neg m_1}$ exactly, confirming T
 
 ---
 
-## 7. Why mechanism-level interventions are *more* identifiable than Pearl multi-variable
+## 7. Why mechanism-level interventions admit a closed-form identifier
 
-A subtle but important point. Pearl's $\mathrm{do}(\neg m_1)$-equivalent intervention is the *simultaneous* multi-variable intervention $\mathrm{do}(C = c, D = c)$ for some $c$, integrated against the joint of $(C, D)$ that $m_1$ would have produced. In Pearl, multi-variable interventions are identifiable under more restrictive conditions than single-variable ones (Tian-Pearl 2002 §4). The hypergraph framework, by contrast, treats $\mathrm{do}(\neg m_1)$ as a *single* intervention and gives it identifiability under the *same* conditions as variable interventions.
+A subtle but important point. Pearl's $\mathrm{do}(\neg m_1)$-equivalent intervention is the *stochastic multi-variable* intervention $\mathrm{do}(C \sim P_0, D \sim P_0)$, with $(C, D)$ jointly resampled from $\prod P_0$. In Pearl ADMGs, identifying multi-variable stochastic interventions reduces to standard multi-variable ID with a substitution step (Bareinboim-Pearl 2016) and is in general case-analytic — the ID algorithm runs, may invoke the do-calculus rules in non-trivial sequences, and (in the worst case) returns a hedge.
 
-This is a substantive theoretical observation: **first-class addressability of mechanisms simplifies identifiability theory.** The identifiability of mechanism-level interventions in the hypergraph framework is uniformly at least as good as, and sometimes strictly better than, the identifiability of their Pearl multi-variable translations.
+The hypergraph framework, by contrast, treats $\mathrm{do}(\neg m_1)$ as a *single* operation and gives it a **closed-form identifier** read directly from Lemma 1.1's factorization: $P(V) / P(\mathrm{out}(m_1) \mid \mathrm{in}(m_1)) \cdot \prod_{v \in \mathrm{out}(m_1)} P_0(v)$. No algorithmic search, no case analysis, no hedge check — the formula is uniform in the structure of $\mathcal{M}$.
+
+This is the framework's substantive theoretical contribution at the level of identifiability: **first-class addressability of mechanisms collapses a multi-variable case-analytic ID problem into a single closed-form expression.** Whether this collapse also extends the *class* of identifiable queries — a stronger claim — depends on the setting. Under v1 conventions with $V^{\mathrm{lat}} = \emptyset$, we believe both formalisms reach the same identifiability verdicts in concrete cases (see `THEOREM_T4_T5.md` §3 for the precise observation). Under hidden variables, T6's observed-boundary closed form does in concrete cases bypass hyper-hedge analysis that Pearl's ID would otherwise require.
 
 ---
 
@@ -178,8 +169,16 @@ This is a substantive theoretical observation: **first-class addressability of m
             Corollary T2.1 (identifiability under sufficiency)
                       |
                       v
-            (Open) H1: hedge-obstruction ID algorithm
-            (Open) H2: mechanism-correlated noise expressibility
+            T4 (hidden mechanisms; observed variables)
+                      |
+                      v
+            T6 (hidden variables; observed boundary)
+                      |
+                      v
+            T7 + hyper-hedge (boundary-violating reduction)
+                      |
+                      v
+            (Open) H1+ completeness — `THEOREM_H1_PLUS.md` §4.3
 ```
 
 ---

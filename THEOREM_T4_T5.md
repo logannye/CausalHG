@@ -2,7 +2,7 @@
 
 This document is the principal H1 contribution. It addresses identifiability of post-intervention distributions in **Hypergraph ADMGs (HADMGs)** — the analogue of Pearl's acyclic directed mixed graphs in the hypergraph framework.
 
-The headline finding is *not* that the hypergraph framework needs its own version of Shpitser-Pearl 2006's hedge criterion (as originally conjectured in `THEOREM_T2_T3.md` §5.1) — it is that **mechanism-deletion identifiability is strictly easier than variable-intervention identifiability**, because mechanism-level interventions act at the level where the chain rule already factorizes. The hedge machinery is needed only for variable interventions, and there it lifts directly via the bipartite blowup.
+The headline finding is *not* that the hypergraph framework needs its own version of Shpitser-Pearl 2006's hedge criterion — it is that **mechanism-deletion identifiability admits a single closed-form identifier** read directly from the chain rule (no Pearl ID search), uniformly in whether the target mechanism is observed or latent. Variable interventions reduce verbatim to Pearl multi-variable ID on the bipartite blowup (T5). The asymmetry — closed-form vs case-analytic — is structural: mechanism-level interventions act at the level where the chain rule already factorizes. The asymmetry sharpens further under hidden variables (T6/T7 in `THEOREM_H1_PLUS.md`).
 
 ---
 
@@ -90,19 +90,25 @@ T5 is a **reduction**, not a new theorem. It says: the hypergraph framework does
 
 ## 3. The asymmetry between mechanism and variable interventions
 
-Combining T4 and T5 gives a clean picture:
+Combining T4 and T5:
 
-| Intervention type | Identifiability under hidden mechanisms |
+| Intervention type | Identifying expression under v1 + $V^{\mathrm{lat}} = \emptyset$ |
 |---|---|
-| $\mathrm{do}(v = x)$ — variable intervention | Pearl hedge criterion via $B^\dagger(\mathcal{M})$ — non-trivial, may fail. |
-| $\mathrm{do}(\neg m)$ — mechanism deletion | **Always identifiable** (T4) under v1 + all-variables-observed. |
-| $\mathrm{do}(m \to m')$ — mechanism replacement | **Always identifiable** under same conditions (T3 + T4). |
+| $\mathrm{do}(\neg m)$ — mechanism deletion | **Closed form (T4):** $P(V) / P(\mathrm{out}(m) \mid \mathrm{in}(m)) \cdot \prod P_0$. Always identifiable; computable in $O(\lvert V \rvert + \lvert E \rvert)$. |
+| $\mathrm{do}(m \to m')$ — mechanism replacement | **Closed form (T3 + T4):** same denominator, replacement factor in numerator. |
+| $\mathrm{do}(v = x)$ — variable intervention | **Reduction to Pearl multi-variable ID on $B^\dagger(\mathcal{M})$ (T5).** No new theory required. |
 
-This asymmetry is the substantive theoretical content of H1. It is not an accident of v1 conventions — it is structural. Mechanism-level interventions interact with the chain-rule factorization at the level of *factors*, where confounding is already integrated out. Variable-level interventions interact at the level of *individual structural equations*, where confounding obstructs.
+The asymmetry is best stated precisely. It has two distinct components:
 
-**Implication for the framework's value proposition.** The hypergraph framework is not just notationally cleaner — its native intervention vocabulary (mechanism deletion, mechanism replacement) admits a strictly easier identifiability theory than Pearl's variable interventions. Modeling a domain with first-class mechanisms gains real epistemic leverage: more queries are answerable from observational data alone.
+**(a) Closed-form vs case-analytic.** Mechanism interventions admit a single explicit identifying formula readable directly from the chain rule. Variable interventions require running Pearl's ID algorithm on the bipartite-blowup ADMG; the algorithm always terminates, but its output is case-analytic rather than uniform.
 
-This is the strongest argument yet for why "first-class addressability of mechanisms" matters formally, not just ergonomically.
+**(b) Robustness to hidden mechanisms.** T4's formula is invariant to whether $m^\star$ is observed or latent — only the typed incidence is needed. Variable-intervention identifiability via T5 depends on the specific bidirected-edge structure induced by latent mechanisms in $B^\dagger(\mathcal{M})$.
+
+A natural further question is whether T5 ever yields *unidentifiable* on a HADMG satisfying v1 conventions (C1–C4 + $V^{\mathrm{lat}} = \emptyset$). Under HSCM intervention semantics ($\mathrm{do}(v=x)$ deletes the producing mechanism and orphans siblings to $P_0$), an intervention on any output of a multi-output mechanism corresponds in $B^\dagger(\mathcal{M})$ to a multi-variable intervention spanning the entire output set. This severs all bidirected edges that the latent mechanism would otherwise contribute, eliminating the standard Shpitser-Pearl hedge constructions. We have not been able to exhibit a v1 HADMG on which a variable intervention is genuinely unidentifiable; we conjecture none exist, but state this as observation rather than theorem and do not commit to the claim.
+
+Under hidden *variables* ($V^{\mathrm{lat}} \neq \emptyset$, treated in `THEOREM_H1_PLUS.md`), the asymmetry sharpens: T6 settles the observed-boundary case in closed form, while T7's boundary-violating case reduces to a Pearl ID problem that *can* genuinely fail (hyper-hedge obstructions).
+
+**Implication for the framework's value proposition.** The contribution is not new identifiability where Pearl's machinery fails — it is (i) a closed-form identifier requiring no algorithmic search, (ii) an intervention vocabulary aligned with experimental practice (one drug ablation = one $\mathrm{do}(\neg m)$, not a multi-variable Pearl translation), and (iii) under hidden variables, a clean sufficient condition (T6) that bypasses the hyper-hedge analysis entirely.
 
 ---
 
@@ -196,17 +202,20 @@ We do not state this as a separate theorem but include it as **Corollary T4.1**.
 
 ---
 
-## 8. Implications for H2
+## 8. Mechanism-correlated noise: scope of T4
 
-H2 (`THEOREM_T2_T3.md` §5.2) conjectures that mechanism-correlated noise — distinct mechanisms with correlated noise — generates conditional independencies inexpressible by any finite-latent Pearl SCM. T4's derivation depended explicitly on the noise-independence assumption: the step "the conditional $P(\mathrm{out}(m) \mid \mathrm{in}(m))$ equals the causal mechanism factor" requires $u_m \perp \mathrm{in}(m)$.
+T4's derivation depends on the cross-mechanism noise-independence assumption $u_{m_1} \perp u_{m_2}$ (in the spirit of C2). The step "the conditional $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ equals the causal mechanism factor" requires $u_{m^\star} \perp \mathrm{in}(m^\star)$, which holds under noise independence.
 
-Under mechanism-correlated noise, this fails. T4's clean formula ceases to apply, and a richer identifiability theory becomes necessary. **H2 is therefore the genuine frontier**: the case where mechanism interventions go from trivially-easy (T4) to as-hard-or-harder than Pearl variable interventions.
+If this assumption is relaxed — mechanisms share correlated noise via shared environmental input or common stochastic source — the mechanism factor in $P(V)$ ceases to equal the pushforward of $u_{m^\star}$ through $f_{m^\star}(\mathrm{in}(m^\star), \cdot)$, and T4's formula no longer applies. An earlier draft conjectured (**H2**) that this regime exhibits conditional independencies inexpressible by any finite-latent Pearl SCM — i.e., representational strict-dominance of the hypergraph framework. We have **retracted H2** (`THEOREM_T2_T3.md` §5.2): Pearl-with-latents is universal at both the distributional and interventional level, so any HSCM with correlated mechanism noise has a Pearl realization with appropriately introduced latent common causes.
 
-The roadmap is now explicit:
+The substantive consequence: under correlated mechanism noise, identifiability of $\mathrm{do}(\neg m^\star)$ falls back to standard hidden-confounder analysis on a Pearl ADMG obtained from the bipartite blowup (T7's machinery, applied with the correlation latents made explicit). There is no special hypergraph hedge structure beyond the Pearl one. The framework's value under correlated noise is therefore modeling-ergonomic — keeping correlation at the mechanism level rather than reifying it as Pearl latents — not theoretical strict-dominance.
 
-- **T4** — closes the easy case (v1 + noise independence): mechanism interventions identifiable, asymmetrically easier than variable interventions.
-- **H1+** (open) — extends T4 to hidden-variable HADMGs via hyper-hedge characterization.
-- **H2** (open) — establishes representational strict-dominance of the hypergraph framework via mechanism-correlated-noise expressivity.
+The roadmap that remains:
+
+- **T4** (proved) — closes the easy case (v1 + noise independence): mechanism deletion identifiable in HADMGs with $V^{\mathrm{lat}} = \emptyset$.
+- **T6** (proved, `THEOREM_H1_PLUS.md`) — extends T4 to hidden-variable HADMGs under the observed-boundary condition.
+- **T7** (proof-sketched) — reduces the boundary-violating case to Pearl ADMG identification.
+- **H1+ completeness** (open) — the converse of T7's reduction, lifting Shpitser-Pearl 2006 through the bipartite blowup.
 
 ---
 

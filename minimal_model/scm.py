@@ -67,10 +67,14 @@ class HypergraphSCM:
     forced: frozenset[str] = field(default_factory=frozenset)
 
     def validate(self) -> None:
-        """Check v1 conventions C1, C3, C4 and basic well-formedness.
+        """Check v1 conventions C1, C4 and incidence well-formedness.
 
-        Raises ValueError on the first violation. C2 is structural to the Mechanism
-        dataclass and cannot be violated at this level.
+        Raises ValueError on the first violation. C2 (deterministic functions with
+        independent per-mechanism noise) is structural to the Mechanism dataclass.
+        C3 (bipartite role typing — only an in/out partition) is structural to the
+        dataclass's `inputs`/`outputs` fields. The in/out *disjointness* check below
+        is a well-formedness requirement of the typed incidence (FOUNDATIONS.md §1),
+        not C3 itself.
         """
         var_set = set(self.variables)
         # Incidence well-formedness: in(m) and out(m) must be subsets of V, disjoint.
@@ -83,7 +87,8 @@ class HypergraphSCM:
                     raise ValueError(f"Mechanism {m.name!r} output {v!r} not in V.")
             if set(m.inputs) & set(m.outputs):
                 raise ValueError(
-                    f"Mechanism {m.name!r} has overlapping inputs and outputs (C3 violation)."
+                    f"Mechanism {m.name!r} has overlapping inputs and outputs "
+                    "(typed-incidence well-formedness, FOUNDATIONS.md §1)."
                 )
         # C4: single producer.
         producer_count: dict[str, list[str]] = {}

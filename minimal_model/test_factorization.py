@@ -17,7 +17,7 @@ from .examples import reaction_network, replacement_m1
 from .scm import Factor, HypergraphSCM, Mechanism
 
 
-# --------- Validation (C1, C3, C4) ---------
+# --------- Validation (C1, C4, and incidence well-formedness) ---------
 
 def test_validate_passes_on_canonical_example():
     scm = reaction_network()
@@ -47,8 +47,9 @@ def test_validate_rejects_C4_violation():
         raise AssertionError("Expected ValueError for C4 violation")
 
 
-def test_validate_rejects_C3_violation():
-    """A mechanism with overlapping inputs and outputs violates C3."""
+def test_validate_rejects_in_out_overlap():
+    """A mechanism with overlapping inputs and outputs violates typed-incidence
+    well-formedness (FOUNDATIONS.md §1: in(m) ∩ out(m) = ∅)."""
     bogus = Mechanism(
         name="m_bogus",
         inputs=("A",),
@@ -64,9 +65,9 @@ def test_validate_rejects_C3_violation():
     try:
         scm.validate()
     except ValueError as e:
-        assert "overlapping" in str(e) or "C3" in str(e)
+        assert "overlapping" in str(e) or "well-formedness" in str(e)
     else:
-        raise AssertionError("Expected ValueError for C3 violation")
+        raise AssertionError("Expected ValueError for in/out overlap")
 
 
 # --------- Symbolic factorization (Lemma 1.1) ---------
@@ -232,7 +233,7 @@ def _run_all():
     tests = [
         test_validate_passes_on_canonical_example,
         test_validate_rejects_C4_violation,
-        test_validate_rejects_C3_violation,
+        test_validate_rejects_in_out_overlap,
         test_factorize_gives_expected_factors,
         test_factorize_only_exogenous_for_unproduced,
         test_truncated_factorization_drops_deleted_mechanism,

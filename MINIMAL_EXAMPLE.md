@@ -74,7 +74,7 @@ $$
 \mathrm{Cov}(C, D) = \mathrm{Var}(C), \qquad \mathrm{Corr}(C, D) = 1 \text{ exactly}
 $$
 
-The exact $\mathrm{Corr}(C, D) = 1$ is the empirical signature of joint mechanism. **This signature is structurally inexpressible in any Pearl SCM** with independent equations $C := f_C(A, B, u_C)$, $D := f_D(A, B, u_D)$, $u_C \perp u_D$, unless both equations are deterministic — see §7.
+The exact $\mathrm{Corr}(C, D) = 1$ is the empirical signature of joint mechanism. **This signature is structurally inexpressible in any latent-free Pearl SCM** with independent equations $C := f_C(A, B, u_C)$, $D := f_D(A, B, u_D)$, $u_C \perp u_D$, unless both equations are deterministic — see §7. (Pearl *with* a latent common cause matches the joint, at the cost of introducing a latent variable that has no role in the experimentalist's intervention vocabulary; this is the "first-class addressability" point made precise.)
 
 ---
 
