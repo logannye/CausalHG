@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from causal_hypergraphs.expression import Fallback, Product, SumOut
 from causal_hypergraphs.graph import MechanismGraph
 
-from .pearl_id import ADMG
+from .pearl_id import ADMG, PearlIDBackend, PearlIDQuery
 from .queries import DeleteMechanism, ReplaceMechanism
-from .results import Unknown
+from .results import Assumption, IdentificationResult, Identified, ProofStep, Unknown
 
 
 def variable_node(variable: str) -> str:
@@ -98,6 +99,9 @@ class StochasticInterventionReduction:
     query_type: str = ""
     replacement_kernel: str | None = None
     admg: BipartiteADMG | None = None
+    variable_admg: ADMG | None = None
+    pearl_outcomes: tuple[str, ...] = ()
+    pearl_interventions: tuple[str, ...] = ()
     status: str = "reduced"
 
     def __init__(
@@ -108,6 +112,9 @@ class StochasticInterventionReduction:
         target_mechanism: str = "",
         query_type: str = "",
         admg: BipartiteADMG | None = None,
+        variable_admg: ADMG | None = None,
+        pearl_outcomes: object = (),
+        pearl_interventions: object = (),
         status: str = "reduced",
     ) -> None:
         object.__setattr__(self, "target_mechanism", str(target_mechanism))
@@ -116,6 +123,9 @@ class StochasticInterventionReduction:
         object.__setattr__(self, "conditioning_inputs", _ordered(conditioning_inputs))
         object.__setattr__(self, "replacement_kernel", replacement_kernel)
         object.__setattr__(self, "admg", admg)
+        object.__setattr__(self, "variable_admg", variable_admg)
+        object.__setattr__(self, "pearl_outcomes", _ordered(pearl_outcomes))
+        object.__setattr__(self, "pearl_interventions", _ordered(pearl_interventions))
         object.__setattr__(self, "status", str(status))
 
 
@@ -234,6 +244,42 @@ def latent_project(graph: MechanismGraph) -> BipartiteADMG:
     )
 
 
+def latent_project_to_variable_admg(graph: MechanismGraph) -> ADMG:
+    """Project a mechanism graph to an observed-variable ADMG for Pearl backends.
+
+    This is intentionally conservative: directed edges come from observed inputs
+    to observed outputs of one mechanism, and bidirected edges come from hidden
+    variables that are direct inputs to mechanisms producing observed variables.
+    """
+
+    observed = graph.observed_set
+    directed_edges: set[tuple[str, str]] = set()
+    hidden_children: dict[str, set[str]] = {variable: set() for variable in graph.hidden_variables}
+
+    for mechanism in graph.mechanisms.values():
+        observed_inputs = set(mechanism.inputs) & observed
+        observed_outputs = set(mechanism.outputs) & observed
+        for source in observed_inputs:
+            for target in observed_outputs:
+                if source != target:
+                    directed_edges.add((source, target))
+        for hidden_input in set(mechanism.inputs) & graph.hidden_variables:
+            hidden_children.setdefault(hidden_input, set()).update(observed_outputs)
+
+    bidirected_edges: set[tuple[str, str]] = set()
+    for children in hidden_children.values():
+        ordered_children = sorted(children)
+        for index, left in enumerate(ordered_children):
+            for right in ordered_children[index + 1 :]:
+                bidirected_edges.add(_bidirected_edge((left, right)))
+
+    return ADMG(
+        nodes=observed,
+        directed_edges=directed_edges,
+        bidirected_edges=bidirected_edges,
+    )
+
+
 def reduce_mechanism_query_to_stochastic_intervention(
     graph: MechanismGraph,
     query: DeleteMechanism | ReplaceMechanism,
@@ -244,6 +290,7 @@ def reduce_mechanism_query_to_stochastic_intervention(
     if isinstance(query, ReplaceMechanism):
         query_type = "replace"
         replacement_kernel = f"P_{query.replacement}"
+    variable_admg = latent_project_to_variable_admg(graph)
     return StochasticInterventionReduction(
         target_mechanism=query.target,
         query_type=query_type,
@@ -251,6 +298,114 @@ def reduce_mechanism_query_to_stochastic_intervention(
         conditioning_inputs=target.inputs,
         replacement_kernel=replacement_kernel,
         admg=latent_project(graph),
+        variable_admg=variable_admg,
+        pearl_outcomes=query.outcomes if isinstance(query, DeleteMechanism) else (),
+        pearl_interventions=target.outputs,
+    )
+
+
+T7_ASSUMPTIONS = (
+    Assumption("T7 reduction", "Boundary-violating mechanism query is reduced to Pearl ID."),
+    Assumption("Stochastic deletion", "Mechanism deletion inserts fallback factors for outputs."),
+    Assumption("Single-output target", "Current T7 vertical slice supports one target output."),
+)
+
+
+def identify_delete_via_t7(
+    graph: MechanismGraph,
+    query: DeleteMechanism,
+    observed_variables: object | None = None,
+) -> IdentificationResult:
+    target = graph.get_mechanism(query.target)
+    observed = (
+        graph.observed_set
+        if observed_variables is None
+        else frozenset(_ordered(observed_variables))
+    )
+    missing_boundary = tuple(sorted(target.boundary - observed))
+    if not missing_boundary:
+        return Unknown(
+            reason="T7 was requested, but the target boundary is already observed.",
+            next_algorithm="Use T2/T4/T6 local factor replacement.",
+        )
+    if not query.outcomes:
+        return Unknown(
+            reason="T7 deletion queries require an explicit observed outcome set.",
+            next_algorithm="Call DeleteMechanism(target, outcomes={...}).",
+            missing_variables=missing_boundary,
+        )
+    if len(target.outputs) != 1:
+        return Unknown(
+            reason="Current T7 vertical slice supports one target output.",
+            next_algorithm="Generalize stochastic-intervention composition.",
+            missing_variables=missing_boundary,
+        )
+    unknown_outcomes = set(query.outcomes) - observed
+    if unknown_outcomes:
+        return Unknown(
+            reason="T7 outcomes must be observed variables.",
+            suggestions=tuple(
+                f"Observe outcome variable {variable!r}."
+                for variable in sorted(unknown_outcomes)
+            ),
+            missing_variables=tuple(sorted(unknown_outcomes)),
+        )
+    missing_fallback = graph.missing_fallback_variables(query.target)
+    if missing_fallback:
+        return Unknown(
+            reason="Mechanism deletion would orphan outputs without a declared fallback policy.",
+            suggestions=tuple(
+                f"Declare fallback distribution P0({variable})."
+                for variable in missing_fallback
+            ),
+            missing_variables=missing_fallback,
+        )
+
+    reduction = reduce_mechanism_query_to_stochastic_intervention(graph, query)
+    if reduction.variable_admg is None:
+        return Unknown(
+            reason="T7 reduction did not produce a Pearl ADMG.",
+            next_algorithm="Build variable-level latent projection.",
+            missing_variables=missing_boundary,
+        )
+
+    pearl_result = PearlIDBackend().identify(
+        reduction.variable_admg,
+        PearlIDQuery(reduction.pearl_outcomes, reduction.pearl_interventions),
+    )
+    if not isinstance(pearl_result, Identified):
+        return Unknown(
+            reason="Pearl backend did not identify the reduced T7 effect.",
+            next_algorithm="Complete Pearl ID and hedge extraction.",
+            suggestions=("Keep this case as Unknown until a real hedge witness is available.",),
+            missing_variables=missing_boundary,
+            derivation=(
+                ProofStep(
+                    "Boundary check",
+                    f"Hidden boundary variables: {list(missing_boundary)}.",
+                ),
+                ProofStep("Pearl reduction", f"Backend result status: {pearl_result.status}."),
+            ),
+        )
+
+    target_output = target.outputs[0]
+    expression = SumOut(target.outputs, Product([Fallback(target_output), pearl_result.expression]))
+    return Identified(
+        expression=expression,
+        theorem="T7",
+        assumptions=T7_ASSUMPTIONS + pearl_result.assumptions,
+        derivation=(
+            ProofStep("Boundary check", f"Hidden boundary variables: {list(missing_boundary)}."),
+            ProofStep(
+                "Reduce to Pearl ID",
+                f"Deleted output {target_output!r} becomes Pearl intervention variable.",
+            ),
+            ProofStep(
+                "Pearl backend",
+                f"Reduced effect identified by {pearl_result.theorem}.",
+            ),
+            ProofStep("Compose deletion", f"Marginalize fallback factor P0({target_output})."),
+        ),
     )
 
 

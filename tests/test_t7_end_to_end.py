@@ -1,0 +1,70 @@
+from causal_hypergraphs import (
+    DeleteMechanism,
+    Identified,
+    Unknown,
+    identify,
+    latent_project_to_variable_admg,
+    reduce_mechanism_query_to_stochastic_intervention,
+)
+from causal_hypergraphs.examples import frontdoor_hidden_boundary_graph
+
+
+def test_frontdoor_hidden_boundary_graph_reduces_to_variable_admg() -> None:
+    graph = frontdoor_hidden_boundary_graph()
+    admg = latent_project_to_variable_admg(graph)
+
+    assert admg.nodes == ("X", "Y", "Z")
+    assert admg.directed_edges == (("X", "Z"), ("Z", "Y"))
+    assert admg.bidirected_edges == (("X", "Y"),)
+
+
+def test_delete_mechanism_reduction_records_pearl_query() -> None:
+    graph = frontdoor_hidden_boundary_graph()
+    reduction = reduce_mechanism_query_to_stochastic_intervention(
+        graph,
+        DeleteMechanism("m_x", outcomes={"Y"}),
+    )
+
+    assert reduction.query_type == "delete"
+    assert reduction.target_outputs == ("X",)
+    assert reduction.conditioning_inputs == ("W",)
+    assert reduction.pearl_interventions == ("X",)
+    assert reduction.pearl_outcomes == ("Y",)
+    assert reduction.variable_admg is not None
+
+
+def test_t7_is_opt_in_for_boundary_violating_queries() -> None:
+    graph = frontdoor_hidden_boundary_graph()
+
+    result = identify(graph, DeleteMechanism("m_x", outcomes={"Y"}))
+
+    assert isinstance(result, Unknown)
+    assert result.next_algorithm == "T7 Pearl-ID reduction"
+    assert result.missing_variables == ("W",)
+
+
+def test_t7_frontdoor_deletion_path_identifies_when_enabled() -> None:
+    graph = frontdoor_hidden_boundary_graph()
+
+    result = identify(graph, DeleteMechanism("m_x", outcomes={"Y"}), allow_t7=True)
+
+    assert isinstance(result, Identified)
+    assert result.theorem == "T7"
+    assert str(result.expression) == (
+        "sum_{X} P0(X) * "
+        "sum_{Z} P(Z | X) * sum_{X_prime} P(X_prime) * P(Y | X_prime,Z)"
+    )
+    assert result.expression.scope() == frozenset({"Y"})
+    assert any(assumption.code == "T7 reduction" for assumption in result.assumptions)
+    assert any(assumption.code == "Front-door" for assumption in result.assumptions)
+    assert result.derivation[2].label == "Pearl backend"
+
+
+def test_t7_requires_explicit_outcomes_for_boundary_violating_deletion() -> None:
+    graph = frontdoor_hidden_boundary_graph()
+
+    result = identify(graph, DeleteMechanism("m_x"), allow_t7=True)
+
+    assert isinstance(result, Unknown)
+    assert result.reason == "T7 deletion queries require an explicit observed outcome set."
+    assert result.next_algorithm == "Call DeleteMechanism(target, outcomes={...})."

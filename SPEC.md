@@ -157,7 +157,7 @@ The compiler returns structured result objects:
 - `Unidentified`: a backend has produced a non-identification witness such as a
   Pearl hedge.
 
-Boundary-violating hidden-variable cases return:
+Boundary-violating hidden-variable cases return this by default:
 
 ```text
 Unknown(
@@ -168,6 +168,28 @@ Unknown(
 ```
 
 This is an honest implementation boundary, not a claim of impossibility.
+
+Callers may opt into the experimental T7 vertical slice with
+`identify(..., allow_t7=True)`. The current opt-in path supports single-output
+mechanism deletion with explicit observed outcomes:
+
+```python
+identify(
+    graph,
+    DeleteMechanism("m_x", outcomes={"Y"}),
+    allow_t7=True,
+)
+```
+
+For this supported case, deletion of the target mechanism is compiled as a
+stochastic intervention on its output:
+
+```text
+P(Y | delete(m_x)) = sum_x P0(x) * P(Y | do(x))
+```
+
+The Pearl backend must identify `P(Y | do(x))`; otherwise the mechanism compiler
+returns `Unknown`.
 
 ## T7 Track
 
@@ -182,8 +204,8 @@ mechanism query
   -> mechanism-level expression or hedge witness
 ```
 
-The current repository includes infrastructure for these intermediate objects
-and a deliberately isolated Pearl-ID backend. The top-level `identify(...)`
-function must not silently route boundary-violating mechanism queries through
-partial T7 support until the reduction is covered by adversarial tests and
-documented as sound.
+The current repository includes infrastructure for these intermediate objects,
+a variable-level ADMG projection for the vertical slice, and a deliberately
+isolated Pearl-ID backend. The top-level `identify(...)` function does not
+silently route boundary-violating mechanism queries through partial T7 support;
+the caller must pass `allow_t7=True`.

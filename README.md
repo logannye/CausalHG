@@ -162,12 +162,14 @@ compiler refuses rather than returning an unsound estimand.
   a bipartite ADMG, and stochastic-intervention reduction records.
 - Isolated Pearl-ID backend for observational marginals, Markovian truncated
   factorization, and the canonical front-door pattern.
+- Opt-in T7 front-door vertical slice via
+  `identify(..., DeleteMechanism("m_x", outcomes={...}), allow_t7=True)`.
 - Canonical reaction-network examples.
 - Compatibility test coverage for the existing `minimal_model/` reference code.
 
 ## Not Yet Supported
 
-- Complete T7 Pearl-ID reduction.
+- Complete T7 Pearl-ID reduction beyond the current front-door vertical slice.
 - Hyper-hedge completeness.
 - Complete Pearl-ID support beyond the currently implemented backend cases.
 - General functional-determination closure beyond declared equality rules.

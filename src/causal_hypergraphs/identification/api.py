@@ -17,6 +17,7 @@ from .results import (
     ProofStep,
     Unknown,
 )
+from .t7 import identify_delete_via_t7
 
 CORE_ASSUMPTIONS = (
     Assumption("C1", "Mechanism dependency graph is acyclic."),
@@ -30,6 +31,7 @@ def identify(
     graph: MechanismGraph,
     query: DeleteMechanism | ReplaceMechanism,
     observed_variables: object | None = None,
+    allow_t7: bool = False,
 ) -> IdentificationResult:
     """Identify a mechanism-level query using the milestone-1 compiler.
 
@@ -38,11 +40,12 @@ def identify(
     - T4/T4.1 when all variables are observed and latent mechanisms are present.
     - T6 when hidden variables exist but the target mechanism boundary is observed.
 
-    Boundary-violating hidden-variable cases return Unknown with T7 guidance.
+    Boundary-violating hidden-variable cases return Unknown with T7 guidance unless
+    `allow_t7=True` and the experimental T7 vertical slice identifies the query.
     """
 
     if isinstance(query, DeleteMechanism):
-        return _identify_delete(graph, query, observed_variables)
+        return _identify_delete(graph, query, observed_variables, allow_t7=allow_t7)
     if isinstance(query, ReplaceMechanism):
         return _identify_replace(graph, query, observed_variables)
     raise TypeError(f"Unsupported query type: {type(query).__name__}")
@@ -108,11 +111,14 @@ def _identify_delete(
     graph: MechanismGraph,
     query: DeleteMechanism,
     observed_variables: object | None,
+    allow_t7: bool = False,
 ) -> IdentificationResult:
     target = graph.get_mechanism(query.target)
     observed = _observed(graph, observed_variables)
     missing_boundary = tuple(sorted(target.boundary - observed))
     if missing_boundary:
+        if allow_t7:
+            return identify_delete_via_t7(graph, query, observed_variables)
         return _unknown_boundary(graph, query.target, missing_boundary)
 
     missing_fallback = graph.missing_fallback_variables(query.target)

@@ -32,7 +32,9 @@ def test_pearl_backend_frontdoor_identifies_confounding_case() -> None:
 
     assert isinstance(result, Identified)
     assert result.theorem == "Pearl-ID front-door"
-    assert str(result.expression) == "sum_{Z} P(Z | X) * sum_{X} P(X) * P(Y | X,Z)"
+    assert str(result.expression) == (
+        "sum_{Z} P(Z | X) * sum_{X_prime} P(X_prime) * P(Y | X_prime,Z)"
+    )
     assert result.expression.scope() == frozenset({"X", "Y"})
     assert result.expression.conditioned_on() == frozenset({"X"})
     assert len(result.expression.kernels()) == 3

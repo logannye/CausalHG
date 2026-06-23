@@ -49,3 +49,18 @@ def hidden_variable_graph() -> MechanismGraph:
             "m_2": Mechanism("m_2", inputs=("C", "E", "W"), outputs=("F",)),
         },
     )
+
+
+def frontdoor_hidden_boundary_graph() -> MechanismGraph:
+    """Hidden-boundary graph whose T7 variable projection is X -> Z -> Y, X <-> Y."""
+
+    return MechanismGraph(
+        variables={"W", "X", "Y", "Z"},
+        observed_variables={"X", "Y", "Z"},
+        mechanisms={
+            "m_W": Mechanism("m_W", outputs=("W",), latent=True),
+            "m_x": Mechanism("m_x", inputs=("W",), outputs=("X",)),
+            "m_z": Mechanism("m_z", inputs=("X",), outputs=("Z",)),
+            "m_y": Mechanism("m_y", inputs=("W", "Z"), outputs=("Y",)),
+        },
+    )

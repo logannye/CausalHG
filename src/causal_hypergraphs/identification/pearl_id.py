@@ -300,7 +300,11 @@ class PearlIDBackend:
                 continue
             if not graph.has_bidirected_path(x, y):
                 continue
-            inner = SumOut(x, Product([Probability(y, given=(x, z)), Probability(x)]))
+            x_prime = f"{x}_prime"
+            inner = SumOut(
+                x_prime,
+                Product([Probability(y, given=(x_prime, z)), Probability(x_prime)]),
+            )
             return SumOut(z, Product([Probability(z, given=x), inner]))
         return None
 
