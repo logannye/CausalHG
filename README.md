@@ -149,13 +149,19 @@ compiler refuses rather than returning an unsound estimand.
 ## Current Capabilities
 
 - Standard `pyproject.toml` package layout.
+- Formal compiler semantics in `SPEC.md`.
 - Typed mechanism graph validation.
 - Mechanism deletion and replacement queries.
 - T2/T3 identifiers under full observability.
 - T4/T6 identifiers under observed-boundary hidden-variable settings.
-- Plain-text and LaTeX expression rendering.
+- Expression AST with canonical products, scope introspection, primitive kernel
+  extraction, marginalization, and plain-text/LaTeX rendering.
 - Proof-carrying result objects with assumptions and derivation steps.
 - Equality-aware d*-separation for the bipartite blowup.
+- T7 preparation objects: typed bipartite DAG construction, latent projection to
+  a bipartite ADMG, and stochastic-intervention reduction records.
+- Isolated Pearl-ID backend for observational marginals, Markovian truncated
+  factorization, and the canonical front-door pattern.
 - Canonical reaction-network examples.
 - Compatibility test coverage for the existing `minimal_model/` reference code.
 
@@ -163,6 +169,7 @@ compiler refuses rather than returning an unsound estimand.
 
 - Complete T7 Pearl-ID reduction.
 - Hyper-hedge completeness.
+- Complete Pearl-ID support beyond the currently implemented backend cases.
 - General functional-determination closure beyond declared equality rules.
 - Cyclic mechanism graphs.
 - Markov-kernel mechanisms.
