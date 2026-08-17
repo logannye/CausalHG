@@ -36,19 +36,38 @@ mechanism:
 P(V) = product P(exogenous variables) * product P(out(m) | in(m))
 ```
 
-That makes mechanism deletion a local factor replacement:
+That makes mechanism deletion a local factor replacement. When every variable is
+observed, each chain-rule factor is itself an observational quantity, so the
+target factor is *omitted* rather than divided out:
 
 ```text
 P(V | delete(m)) =
-  P(V) / P(out(m) | in(m)) * product P0(v)
+  product_{v exogenous} P(v)
+  * product_{m' != m} P(out(m') | in(m'))
+  * product_{v in out(m)} P0(v)
 ```
 
-and mechanism replacement:
+and mechanism replacement swaps the factor rather than deleting it:
 
 ```text
 P(V | replace(m, m_prime)) =
-  P(V) / P(out(m) | in(m)) * P_m_prime(out(m) | in(m))
+  product_{v exogenous} P(v)
+  * product_{m' != m} P(out(m') | in(m'))
+  * P_m_prime(out(m) | in(m))
 ```
+
+Writing the estimand this way matters. The equivalent quotient form
+`P(V) / P(out(m) | in(m)) * ...` is `0/0` whenever the target mechanism is
+deterministic with functionally coupled outputs — and under C2 that is the
+generic case, since a mechanism whose noise carries fewer degrees of freedom
+than it has outputs induces a singular factor. Deleting such a mechanism moves
+probability mass onto configurations the observational law never visits, which
+is exactly where the quotient is undefined. Omitting the factor is defined
+everywhere the intervention puts mass.
+
+When hidden variables are present the surviving factors are not individually
+identified, so `T6` must go through the quotient and therefore carries an
+explicit `Target positivity` certificate.
 
 The library compiles those queries into proof-carrying estimands when the
 current theory identifies them.
@@ -92,7 +111,7 @@ Expected result:
 
 ```text
 identified
-P(A,B,C,D,E,F) / P(C,D | A,B) * P0(C) * P0(D)
+P(A) * P(B) * P(E) * P(F | C,E) * P0(C) * P0(D)
 T2
 ```
 
