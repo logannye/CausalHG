@@ -75,6 +75,27 @@ def _theorem(graph: MechanismGraph, observed: frozenset[str], replacement: bool 
     return "T6"
 
 
+def _surviving_factors(graph: MechanismGraph, exclude: str) -> list[Probability]:
+    """The mechanism-level chain-rule factors of P(V) that survive intervening on `exclude`.
+
+    Lemma 1.1 factorizes P(V) into one marginal per exogenous variable and one joint
+    conditional P(out(m) | in(m)) per mechanism. A mechanism-level intervention is a
+    *local factor swap*: every factor except the target's is carried through unchanged.
+
+    Returning the surviving factors explicitly — rather than dividing the full joint by
+    the target factor — is what keeps the estimand well defined when the target factor is
+    singular, which under C2 is the generic case for a mechanism whose noise carries fewer
+    degrees of freedom than it has outputs.
+    """
+    factors = [Probability((variable,)) for variable in sorted(graph.exogenous_variables)]
+    for name in sorted(graph.mechanisms):
+        if name == exclude:
+            continue
+        mechanism = graph.get_mechanism(name)
+        factors.append(Probability(mechanism.outputs, given=mechanism.inputs))
+    return factors
+
+
 def _unknown_boundary(graph: MechanismGraph, target: str, missing: tuple[str, ...]) -> Unknown:
     suggestions = tuple(f"Measure boundary variable {variable!r}." for variable in missing)
     return Unknown(
@@ -126,22 +147,80 @@ def _identify_delete(
         return _unknown_fallback(query.target, missing_fallback)
 
     theorem = _theorem(graph, observed, replacement=False)
-    numerator = Probability(tuple(sorted(observed)))
-    denominator = Probability(target.outputs, given=target.inputs)
-    expression = Product([Quotient(numerator, denominator), *[Fallback(v) for v in target.outputs]])
-    assumptions = CORE_ASSUMPTIONS + (
+    fallbacks = [Fallback(v) for v in target.outputs]
+    common = CORE_ASSUMPTIONS + (
         Assumption("P0", "Fallback distributions are specified for orphaned outputs."),
         Assumption("Observed boundary", "Target mechanism inputs and outputs are observed."),
     )
+    validate_step = ProofStep("Validate graph", "C1-C4 passed during MechanismGraph construction.")
+    factorize_step = ProofStep(
+        "Factorize",
+        "Lemma 1.1: P(V) is the product of exogenous marginals and one joint conditional "
+        "P(out(m) | in(m)) per mechanism.",
+    )
+
+    if observed == graph.variable_set:
+        # Every chain-rule factor is an observational quantity, so the target factor can be
+        # *omitted* rather than divided out. This keeps the estimand defined where that
+        # factor is singular -- the generic case under C2 for a mechanism whose noise carries
+        # fewer degrees of freedom than it has outputs.
+        expression = Product([*_surviving_factors(graph, exclude=query.target), *fallbacks])
+        assumptions = common + (
+            Assumption(
+                "Downstream positivity",
+                "Every surviving mechanism input configuration that the post-intervention law "
+                "gives positive mass has positive observational probability, so each surviving "
+                "factor P(out(m) | in(m)) is estimable there.",
+            ),
+        )
+        derivation = (
+            validate_step,
+            factorize_step,
+            ProofStep(
+                "Omit target factor",
+                f"Drop P({','.join(target.outputs)} | {','.join(target.inputs)}) from the "
+                "product and multiply by the fallback output factors. No division by the "
+                "target factor is performed.",
+            ),
+        )
+        return Identified(
+            expression=expression,
+            theorem=theorem,
+            assumptions=assumptions,
+            derivation=derivation,
+        )
+
+    # Hidden variables are present. Surviving factors may reference them, so they are not
+    # individually identified and the division-free form is unavailable. Because
+    # boundary(m*) is observed, the target factor pulls out of the sum over hidden variables:
+    #     P(O) = P(out(m*) | in(m*)) * R(O),  R(O) = sum_H prod_{m != m*} (...)
+    # and P(O | delete(m*)) = prod P0(v) * R(O). R(O) is reachable only as the quotient, so
+    # this route requires the target factor to be strictly positive -- an assumption the
+    # full-observability branch above does not need.
+    numerator = Probability(tuple(sorted(observed)))
+    denominator = Probability(target.outputs, given=target.inputs)
+    expression = Product([Quotient(numerator, denominator), *fallbacks])
+    assumptions = common + (
+        Assumption(
+            "Target positivity",
+            "P(out(m*) | in(m*)) > 0 wherever the post-intervention law puts mass. Not "
+            "checkable from incidence; recorded as a certificate. It fails for a "
+            "deterministic mechanism whose outputs are functionally coupled, in which case "
+            "this quotient is 0/0 on exactly the region the intervention creates.",
+        ),
+    )
     derivation = (
-        ProofStep("Validate graph", "C1-C4 passed during MechanismGraph construction."),
+        validate_step,
+        factorize_step,
         ProofStep(
-            "Read mechanism factor",
-            f"P({','.join(target.outputs)} | {','.join(target.inputs)}) is observable.",
+            "Pull out target factor",
+            f"boundary(m*) is observed, so P({','.join(target.outputs)} | "
+            f"{','.join(target.inputs)}) is constant in the hidden variables and factors out "
+            "of the marginalization over them.",
         ),
         ProofStep(
-            "Replace factor",
-            "Delete the target mechanism factor and multiply by fallback output factors.",
+            "Swap factor",
+            "Divide it out of P(O) and multiply by the fallback output factors.",
         ),
     )
     return Identified(
