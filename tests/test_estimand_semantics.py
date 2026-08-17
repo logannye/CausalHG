@@ -66,7 +66,8 @@ DOMAINS = {v: BINARY for v in VARIABLES}
 
 
 def _assignments() -> list[dict[str, int]]:
-    return [dict(zip(VARIABLES, combo)) for combo in itertools.product(*(DOMAINS[v] for v in VARIABLES))]
+    grids = itertools.product(*(DOMAINS[v] for v in VARIABLES))
+    return [dict(zip(VARIABLES, combo, strict=True)) for combo in grids]
 
 
 def observational_joint() -> dict[tuple[int, ...], float]:

@@ -227,6 +227,6 @@ def _(expression: SumOut, model: DiscreteModel, assignment: Assignment) -> float
     total = 0.0
     for combination in itertools.product(*domains):
         extended = dict(assignment)
-        extended.update(dict(zip(summed, combination)))
+        extended.update(dict(zip(summed, combination, strict=True)))
         total += evaluate(expression.expression, model, extended)
     return total

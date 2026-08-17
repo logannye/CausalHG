@@ -65,9 +65,19 @@ new mechanism factor with the same incidence:
 replace(m, m_prime): remove P(out(m) | in(m)), insert P_m_prime(out(m) | in(m))
 ```
 
-The v1 API records the replacement mechanism by name and assumes incidence
-compatibility as an explicit certificate. Later versions should validate
-replacement incidence when the replacement mechanism object is available.
+`replacement` may be a bare name or a `Mechanism`.
+
+- Given a **name**, the compiler has nothing to check. It records
+  `rho(m') = rho(m)` as an assumption certificate.
+- Given a **`Mechanism`**, the compiler verifies the incidence and discharges
+  that certificate into a `Verify replacement incidence` derivation step. A
+  mismatch raises `ValueError`: `do(m -> m')` has no semantics when the
+  replacement does not share the target's input and output boundary, so this is
+  an ill-formed query rather than an unidentified one, and it is rejected the
+  same way a C1/C4 violation is rejected at graph construction.
+
+The replacement name is rendered into the estimand and its LaTeX, so it must
+match `[A-Za-z_][A-Za-z0-9_'-]*`.
 
 ## Expression Language
 
