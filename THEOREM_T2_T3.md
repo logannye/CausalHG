@@ -38,41 +38,61 @@ The mechanism-level chain rule is the principal new factorization tool. It gener
 
 ## 2. Theorem T2: mechanism-deletion truncation
 
-**Theorem T2.** Under v1 conventions and causal sufficiency, for any $m^\star \in E$ with fallback $P_0$ on the orphaned outputs $\mathrm{out}(m^\star)$:
+**Theorem T2 (kernel form).** Under v1 conventions and causal sufficiency, for any $m^\star \in E$ with fallback $P_0$ on the orphaned outputs $\mathrm{out}(m^\star)$:
+
+$$
+P^{\mathcal{M}^{\neg m^\star}}(V) \;=\; \left[\prod_{v \in V^{\mathrm{exo}}} P(v)\right] \cdot \left[\prod_{m \in E \setminus \{m^\star\}} P\!\left(\mathrm{out}(m) \mid \mathrm{in}(m)\right)\right] \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v).
+$$
+
+*Proof.* By Lemma 1.1, $P^{\mathcal{M}}(V)$ has factor $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ for $m^\star$. Deleting $m^\star$ removes this factor from the chain-rule product. Under C4, every $v \in \mathrm{out}(m^\star)$ has no other producer, hence becomes orphaned and acquires the $P_0$ factor. The remaining factors are unchanged, so Lemma 1.1 applied to $\mathcal{M}^{\neg m^\star}$ gives the display above. $\square$
+
+**Corollary T2.1 (quotient form).** If additionally $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)) > 0$ holds $P^{\mathcal{M}^{\neg m^\star}}$-almost everywhere, then
 
 $$
 P^{\mathcal{M}^{\neg m^\star}}(V) \;=\; \frac{P^{\mathcal{M}}(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v).
 $$
 
-*Proof.* By Lemma 1.1, $P^{\mathcal{M}}(V)$ has factor $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ for $m^\star$. Deleting $m^\star$ removes this factor from the chain-rule product. Under C4, every $v \in \mathrm{out}(m^\star)$ has no other producer, hence becomes orphaned and acquires the $P_0$ factor. The remaining factors are unchanged. The post-intervention chain rule gives
+*Proof.* Multiply and divide the kernel form by $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ — legitimate exactly on the region where that factor is nonzero — and apply Lemma 1.1 in reverse. $\square$
 
-$$
-P^{\mathcal{M}^{\neg m^\star}}(V) = \left[\prod_{v \in V^{\mathrm{exo}}_{\mathrm{orig}}} P(v)\right] \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v) \cdot \prod_{m \in E \setminus \{m^\star\}} P(\mathrm{out}(m) \mid \mathrm{in}(m)).
-$$
+**Remark T2.2 (the positivity hypothesis is not cosmetic).** The quotient form is the one that reads like a truncated factorization, but it is the weaker statement, and its hypothesis fails in precisely the case this framework exists to model.
 
-Multiplying numerator and denominator by $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ and applying Lemma 1.1 in reverse:
+C2 posits deterministic structural functions driven by exogenous noise. When $u_{m^\star}$ carries fewer degrees of freedom than $|\mathrm{out}(m^\star)|$ — which is what stoichiometric coupling *is* — the mechanism factor is singular, supported on a proper subset of $\mathrm{Dom}(\mathrm{out}(m^\star))$. Deleting $m^\star$ replaces that factor by one with full support, so $P^{\mathcal{M}^{\neg m^\star}}$ puts mass exactly where $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ vanishes. On that region the quotient is $0/0$, while the kernel form is defined and correct.
 
-$$
-P^{\mathcal{M}^{\neg m^\star}}(V) = \frac{P^{\mathcal{M}}(V)}{P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))} \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v). \qquad \square
-$$
+This is not a measure-theoretic technicality about continuous densities: it is already visible in a two-state discrete model. Take $\mathrm{out}(m^\star) = \{C, D\}$ binary with $C \equiv D$, and $P_0(C), P_0(D)$ of full support. Then $P(C \neq D \mid A,B) = 0$ while $P^{\neg m^\star}(C \neq D) > 0$.
+
+§5 below carries the continuous instance of the same fact, and states it outright: the worked example's mechanism factor is "singular with respect to Lebesgue measure on $\mathbb{R}^2$". The example nonetheless reaches the right answer under the quotient form only because it takes $P_0 = \delta_0 \otimes \delta_0$, which is supported on the diagonal $C = D$ where the singular factor lives. A fallback with any off-diagonal mass breaks it.
+
+Accordingly, the compiler emits the kernel form whenever every chain-rule factor is observational, and falls back to the quotient only where hidden variables leave no alternative (T6), recording `Target positivity` explicitly when it does.
 
 ---
 
 ## 3. Theorem T3: mechanism replacement
 
-**Theorem T3.** Under v1 conventions and causal sufficiency, for any $m^\star \in E$ and any replacement $m'$ with $\rho(m') = \rho(m^\star)$:
+**Theorem T3 (kernel form).** Under v1 conventions and causal sufficiency, for any $m^\star \in E$ and any replacement $m'$ with $\rho(m') = \rho(m^\star)$:
 
 $$
-P^{\mathcal{M}^{m^\star \to m'}}(V) \;=\; \frac{P^{\mathcal{M}}(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot P_{f_{m'}}\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)
+P^{\mathcal{M}^{m^\star \to m'}}(V) \;=\; \left[\prod_{v \in V^{\mathrm{exo}}} P(v)\right] \cdot \left[\prod_{m \in E \setminus \{m^\star\}} P\!\left(\mathrm{out}(m) \mid \mathrm{in}(m)\right)\right] \cdot P_{f_{m'}}\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)
 $$
 
 where $P_{f_{m'}}$ is the conditional distribution induced by the replacement structural function $f_{m'}$ and noise $u_{m'}$.
 
-*Proof.* Replacement substitutes the mechanism factor for $m^\star$ with the corresponding factor for $m'$, leaving all other factors untouched (no orphaning, since the new mechanism produces the same variables). Apply Lemma 1.1. □
+*Proof.* Replacement substitutes the mechanism factor for $m^\star$ with the corresponding factor for $m'$, leaving all other factors untouched (no orphaning, since the new mechanism produces the same variables). Apply Lemma 1.1 to $\mathcal{M}^{m^\star \to m'}$. $\square$
 
-**Corollary T3.1.** $\mathrm{do}(\neg m^\star)$ is the special case of $\mathrm{do}(m^\star \to m')$ where $m'$ is the *trivial mechanism* whose conditional distribution equals the product of fallbacks $\prod_{v \in \mathrm{out}(m^\star)} P_0(v)$, independent of inputs.
+**Corollary T3.1 (quotient form).** If $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)) > 0$ holds $P^{\mathcal{M}^{m^\star \to m'}}$-almost everywhere, the same multiply-and-divide step yields
 
-This corollary unifies the two new operations: deletion is the "set this mechanism to its $P_0$-default" form of replacement.
+$$
+P^{\mathcal{M}^{m^\star \to m'}}(V) \;=\; \frac{P^{\mathcal{M}}(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot P_{f_{m'}}\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right).
+$$
+
+Remark T2.2 applies verbatim, and bites harder here: $\rho(m') = \rho(m^\star)$ constrains incidence, not behaviour, so replacing a coupled mechanism with a decoupled one is a legal query — "what if this complex were two independent enzymes?" — and it is exactly a query whose new mass lands where the old factor vanishes.
+
+**Corollary T3.2 (deletion as replacement).** $\mathrm{do}(\neg m^\star)$ is the special case of $\mathrm{do}(m^\star \to m')$ where $m'$ is the *trivial mechanism* whose conditional distribution equals $\prod_{v \in \mathrm{out}(m^\star)} P_0(v)$, independent of inputs.
+
+This unifies the two new operations: deletion is the "set this mechanism to its $P_0$-default" form of replacement.
+
+**Remark T3.3 (the product form of $P_0$ is a modelling restriction, not a theorem).** Corollary T3.2 exposes a v1 limitation worth naming, because it is invisible in the worked example. Deletion is defined as replacement by a factor that is a *product* of per-variable fallbacks, so $\mathrm{do}(\neg m^\star)$ necessarily renders $\mathrm{out}(m^\star)$ mutually independent. A framework whose stated motivation is that jointly produced outputs are structurally coupled therefore cannot express a post-deletion law that preserves any coupling — for instance a knocked-out reaction whose products still satisfy a conservation constraint imposed by something other than $m^\star$.
+
+Nothing in Lemma 1.1 or T2 requires this. The natural generalization is a per-mechanism joint fallback kernel $P_0^{m^\star}(\mathrm{out}(m^\star))$, of which $\prod_v P_0(v)$ is the independent special case; every statement above goes through with $\prod_{v} P_0(v)$ replaced by $P_0^{m^\star}$. v1 keeps the product form, and the restriction is recorded here rather than left implicit.
 
 ---
 
