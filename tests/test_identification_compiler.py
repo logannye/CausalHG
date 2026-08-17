@@ -60,9 +60,10 @@ def test_replacement_full_observation_returns_t3_expression() -> None:
     assert isinstance(result, Identified)
     assert result.theorem == "T3"
     assert str(result.expression) == (
-        "P(A,B,C,D,E,F) / P(C,D | A,B) * P_m1_prime(C,D | A,B)"
+        "P(A) * P(B) * P(E) * P(F | C,E) * P_m1_prime(C,D | A,B)"
     )
     assert any(assumption.code == "Replacement incidence" for assumption in result.assumptions)
+    assert not _contains_quotient(result.expression)
 
 
 def test_latent_mechanism_uses_t4_when_all_variables_are_observed() -> None:

@@ -243,16 +243,60 @@ def _identify_replace(
         return _unknown_boundary(graph, query.target, missing_boundary)
 
     theorem = _theorem(graph, observed, replacement=True)
-    numerator = Probability(tuple(sorted(observed)))
-    denominator = Probability(target.outputs, given=target.inputs)
     replacement = ReplacementFactor(query.replacement, target.outputs, given=target.inputs)
-    expression = Product([Quotient(numerator, denominator), replacement])
-    assumptions = CORE_ASSUMPTIONS + (
+    common = CORE_ASSUMPTIONS + (
         Assumption(
             "Replacement incidence",
             "Replacement mechanism has the same inputs and outputs.",
         ),
         Assumption("Observed boundary", "Target mechanism inputs and outputs are observed."),
+    )
+
+    if observed == graph.variable_set:
+        # Same argument as deletion: swap the target factor out of the chain-rule product
+        # rather than dividing by it, so the estimand survives a singular target factor.
+        # This is the case "replace a stoichiometrically coupled mechanism with a decoupled
+        # one", where the replacement puts mass exactly where the old factor vanishes.
+        expression = Product([*_surviving_factors(graph, exclude=query.target), replacement])
+        assumptions = common + (
+            Assumption(
+                "Downstream positivity",
+                "Every surviving mechanism input configuration that the post-intervention law "
+                "gives positive mass has positive observational probability, so each surviving "
+                "factor P(out(m) | in(m)) is estimable there.",
+            ),
+        )
+        derivation = (
+            ProofStep("Validate graph", "C1-C4 passed during MechanismGraph construction."),
+            ProofStep(
+                "Factorize",
+                "Lemma 1.1: P(V) is the product of exogenous marginals and one joint "
+                "conditional P(out(m) | in(m)) per mechanism.",
+            ),
+            ProofStep(
+                "Swap target factor",
+                f"Drop P({','.join(target.outputs)} | {','.join(target.inputs)}) from the "
+                f"product and multiply by P_{query.replacement}. No division by the target "
+                "factor is performed.",
+            ),
+        )
+        return Identified(
+            expression=expression,
+            theorem=theorem,
+            assumptions=assumptions,
+            derivation=derivation,
+        )
+
+    numerator = Probability(tuple(sorted(observed)))
+    denominator = Probability(target.outputs, given=target.inputs)
+    expression = Product([Quotient(numerator, denominator), replacement])
+    assumptions = common + (
+        Assumption(
+            "Target positivity",
+            "P(out(m*) | in(m*)) > 0 wherever the post-intervention law puts mass. Not "
+            "checkable from incidence; recorded as a certificate. It fails when the "
+            "replaced mechanism is deterministic with functionally coupled outputs.",
+        ),
     )
     derivation = (
         ProofStep("Validate graph", "C1-C4 passed during MechanismGraph construction."),
