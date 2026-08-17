@@ -64,16 +64,25 @@ def _simple_paths(
 ) -> list[list[str]]:
     """All simple (no repeated nodes) undirected paths from source to target.
 
-    Capped at `max_paths` to avoid pathological blowups; the bipartite blowup
-    of a small hypergraph is small, so this is generous.
+    Raises if more than `max_paths` paths exist. Truncating the enumeration would turn
+    "I stopped looking" into "no open path found", i.e. into a silent claim of
+    separation -- the one error direction a conditional-independence oracle must not
+    make. The bipartite blowup of a small hypergraph is small, so the cap is generous;
+    when it is hit, that is a signal to use a reachability algorithm rather than to
+    return an answer. `src/causal_hypergraphs/separation` decides the same question in
+    O(V + E) by Bayes-Ball.
     """
     results: list[list[str]] = []
     path: list[str] = [source]
     visited: set[str] = {source}
 
     def dfs(node: str) -> None:
-        if len(results) >= max_paths:
-            return
+        if len(results) > max_paths:
+            raise ValueError(
+                f"More than {max_paths} simple paths between {source!r} and {target!r}; "
+                "refusing to truncate, because a truncated enumeration silently reports "
+                "separation. Use causal_hypergraphs.separation.d_separated instead."
+            )
         if node == target:
             results.append(list(path))
             return
@@ -128,9 +137,13 @@ def d_separated(
     if X_set & Y_set or X_set & Z_set or Y_set & Z_set:
         raise ValueError("X, Y, Z must be pairwise disjoint.")
     Z_eff = deterministic_closure(scm, Z_set)
-    # If the determination closure overlaps X or Y, the query is degenerate
-    # (a variable functionally determined by Z is constant given Z).
-    if X_set & Z_eff or Y_set & Z_eff:
+    # A variable functionally determined by Z is constant given Z, so it carries no
+    # information and drops out of the query. Only when *all* of X (or all of Y) is
+    # determined does separation follow immediately -- an undetermined remainder of X can
+    # still be d-connected to Y, so overlap alone is not enough.
+    X_set -= Z_eff
+    Y_set -= Z_eff
+    if not X_set or not Y_set:
         return True
 
     parents, children = _build_adjacency(scm)
