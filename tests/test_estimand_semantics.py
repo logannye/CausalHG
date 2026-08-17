@@ -25,6 +25,7 @@ from causal_hypergraphs import (
     ReplaceMechanism,
     identify,
 )
+from causal_hypergraphs.expression import Fallback, Probability, Product
 from causal_hypergraphs.semantics import DiscreteModel, evaluate
 
 BINARY = (0, 1)
@@ -271,3 +272,56 @@ def test_replacement_of_a_deterministic_mechanism_is_identified_on_the_full_supp
     for x in _assignments():
         key = tuple(x[v] for v in VARIABLES)
         assert evaluate(result.expression, model, x) == pytest.approx(truth[key], abs=1e-12)
+
+
+# --- The oracle must have teeth ---------------------------------------------------
+
+
+def test_oracle_rejects_a_wrong_estimand() -> None:
+    """A differential test that nothing can fail is decoration.
+
+    Perturb the compiled estimand in three ways that a string comparison against a
+    hand-written expected answer would also catch, but which a constant-returning or
+    structurally-plausible identifier would not, and confirm each is detected.
+    """
+    model = DiscreteModel(
+        domains=DOMAINS,
+        joint=observational_joint(),
+        fallbacks={"C": P0_C, "D": P0_D},
+    )
+    truth = interventional_joint_delete_m1()
+    surviving = [
+        Probability(("A",)),
+        Probability(("B",)),
+        Probability(("E",)),
+        Probability(("F",), given=("C", "E")),
+    ]
+
+    wrong_estimands = {
+        # Drops a fallback factor: the shape still looks like a truncated factorization.
+        "missing fallback": Product([*surviving, Fallback("C")]),
+        # Keeps the deleted mechanism's factor instead of replacing it: this is P(V).
+        "target factor retained": Product(
+            [*surviving, Probability(("C", "D"), given=("A", "B"))]
+        ),
+        # Right factors, wrong conditioning set on a surviving mechanism.
+        "wrong conditioning": Product(
+            [
+                Probability(("A",)),
+                Probability(("B",)),
+                Probability(("E",)),
+                Probability(("F",), given=("E",)),
+                Fallback("C"),
+                Fallback("D"),
+            ]
+        ),
+    }
+
+    for label, expression in wrong_estimands.items():
+        mismatches = [
+            x
+            for x in _assignments()
+            if evaluate(expression, model, x)
+            != pytest.approx(truth[tuple(x[v] for v in VARIABLES)], abs=1e-12)
+        ]
+        assert mismatches, f"oracle failed to reject the {label!r} estimand"
