@@ -99,24 +99,60 @@ Let `O` be the observed-variable set used for identification. If the caller does
 not override `observed_variables`, the graph's `observed_variables` field is
 used.
 
+### Singular mechanism factors and the choice of estimand form
+
+A mechanism intervention is a local factor swap in the Lemma 1.1 factorization.
+There are two ways to write that swap, and they are **not** interchangeable.
+
+```text
+quotient form:     P(V) / P(out(m) | in(m)) * <new factor>
+kernel form:       product_{v exogenous} P(v)
+                   * product_{m' != m} P(out(m') | in(m'))
+                   * <new factor>
+```
+
+They agree wherever both are defined. They differ on their domains.
+
+C2 posits deterministic structural functions driven by exogenous noise. When a
+mechanism's noise carries fewer degrees of freedom than `|out(m)|`, its factor
+`P(out(m) | in(m))` is **singular**: it is supported on a proper subset of
+`Dom(out(m))`. This is not a corner case — it is the framework's motivating
+case, since stoichiometric coupling among jointly produced outputs is exactly a
+functional dependence among them.
+
+Intervening on such a mechanism moves probability mass onto configurations the
+observational law never visits. The quotient form is `0/0` on precisely that
+region: the region the intervention creates. The kernel form never divides by
+the target factor and is defined wherever the post-intervention law puts mass.
+
+The compiler therefore emits the **kernel form whenever it can**, and records
+the weaker positivity condition it still needs (`Downstream positivity`). The
+quotient form is used only when hidden variables make the kernel form
+unavailable, and that path carries an explicit `Target positivity` certificate.
+
 ### T2: Full-Observation Deletion
 
 If all variables are observed and no mechanism is marked latent:
 
 ```text
-P(O | delete(m)) =
-  P(O) / P(out(m) | in(m)) * product_{v in out(m)} P0(v)
+P(V | delete(m)) =
+  product_{v exogenous} P(v)
+  * product_{m' != m} P(out(m') | in(m'))
+  * product_{v in out(m)} P0(v)
 ```
 
-The result theorem is `T2`.
+The result theorem is `T2`. Every factor is an observational quantity because
+every variable is observed, which is what makes the kernel form available here.
 
 ### T3: Full-Observation Replacement
 
 If all variables are observed and no mechanism is marked latent:
 
 ```text
-P(O | replace(m, m_prime)) =
-  P(O) / P(out(m) | in(m)) * P_m_prime(out(m) | in(m))
+P(V | replace(m, m_prime)) =
+  product_{v exogenous} P(v)
+  * product_{m' != m} P(out(m') | in(m'))
+  * P_m_prime(out(m) | in(m))
 ```
 
 The result theorem is `T3`.
@@ -124,8 +160,9 @@ The result theorem is `T3`.
 ### T4: All Variables Observed With Latent Mechanisms
 
 If all variables are observed and at least one mechanism is marked latent, the
-same local replacement formula is valid for deletion. The result theorem is
-`T4`.
+same kernel form is valid for deletion. A latent mechanism has an unknown `f`,
+not hidden variables, so its chain-rule factor is still an observational
+conditional over observed variables. The result theorem is `T4`.
 
 Replacement in this setting currently returns theorem label `T4.1`.
 
@@ -137,14 +174,29 @@ If hidden variables exist but the target boundary is fully observed:
 boundary(m) subset O
 ```
 
-the compiler uses the same local factor replacement formula over `P(O)`:
+then surviving factors may reference hidden variables and are not individually
+identified, so the kernel form is unavailable. Because `boundary(m)` is
+observed, the target factor does not depend on the hidden variables and factors
+out of the marginalization over them:
 
 ```text
-P(O | delete(m)) =
-  P(O) / P(out(m) | in(m)) * product_{v in out(m)} P0(v)
+P(O) = P(out(m) | in(m)) * R(O),
+  where R(O) = sum_H product_{m' != m} P(out(m') | in(m')) * product_exo P(v)
 ```
 
-and analogously for replacement. The result theorem is `T6`.
+Since `P0` and the replacement factor also do not depend on `H`:
+
+```text
+P(O | delete(m))          = R(O) * product_{v in out(m)} P0(v)
+P(O | replace(m, m'))     = R(O) * P_m_prime(out(m) | in(m))
+```
+
+`R(O)` is reachable only as `P(O) / P(out(m) | in(m))`, so this route genuinely
+requires the target factor to be strictly positive wherever the
+post-intervention law puts mass. That is recorded as the `Target positivity`
+assumption. It is a semantic condition, not checkable from incidence, and it
+**fails** for a deterministic mechanism with functionally coupled outputs. The
+result theorem is `T6`.
 
 ## Refusal Semantics
 

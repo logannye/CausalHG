@@ -18,7 +18,13 @@ import itertools
 
 import pytest
 
-from causal_hypergraphs import DeleteMechanism, Identified, MechanismGraph, identify
+from causal_hypergraphs import (
+    DeleteMechanism,
+    Identified,
+    MechanismGraph,
+    ReplaceMechanism,
+    identify,
+)
 from causal_hypergraphs.semantics import DiscreteModel, evaluate
 
 BINARY = (0, 1)
@@ -199,6 +205,67 @@ def test_deletion_of_a_deterministic_mechanism_is_identified_on_the_full_support
         fallbacks={"C": P0_C, "D": P0_D},
     )
     truth = interventional_joint_delete_m1()
+
+    for x in _assignments():
+        key = tuple(x[v] for v in VARIABLES)
+        assert evaluate(result.expression, model, x) == pytest.approx(truth[key], abs=1e-12)
+
+
+# --- Replacement of a coupled mechanism by a decoupled one ------------------------
+#
+# rho(m') = rho(m) constrains incidence, not the function. So replacing a
+# stoichiometrically coupled mechanism with one whose outputs are independent is a
+# legal -- and physically natural -- query: "what if this enzyme complex were two
+# independent enzymes?" It is also the case the v1 quotient identifier cannot express.
+
+P_PRIME_C = {0: 0.4, 1: 0.6}
+P_PRIME_D = {0: 0.7, 1: 0.3}
+
+
+def p_cd_given_ab_replacement(c: int, d: int, a: int, b: int) -> float:
+    """A full-support replacement kernel for m1: C and D become independent."""
+    del a, b  # the replacement ignores its inputs; incidence is preserved, not behaviour
+    return P_PRIME_C[c] * P_PRIME_D[d]
+
+
+def interventional_joint_replace_m1() -> dict[tuple[int, ...], float]:
+    joint = {}
+    for x in _assignments():
+        joint[tuple(x[v] for v in VARIABLES)] = (
+            P_A[x["A"]]
+            * P_B[x["B"]]
+            * P_E[x["E"]]
+            * p_cd_given_ab_replacement(x["C"], x["D"], x["A"], x["B"])
+            * p_f_given_ce(x["F"], x["C"], x["E"])
+        )
+    return joint
+
+
+def replacement_kernel_table() -> dict[tuple[tuple[int, ...], tuple[int, ...]], float]:
+    """P_m1_prime(C,D | A,B) keyed as ((c, d), (a, b)) in sorted-variable order."""
+    return {
+        ((c, d), (a, b)): p_cd_given_ab_replacement(c, d, a, b)
+        for c, d, a, b in itertools.product(BINARY, repeat=4)
+    }
+
+
+def test_replacement_of_a_deterministic_mechanism_is_identified_on_the_full_support() -> None:
+    """T3 must stay defined when the *replaced* mechanism is singular.
+
+    Ground truth is strictly positive on {C != D} because the replacement decouples the
+    outputs, while the observational mechanism factor is zero there. The v1 quotient
+    P(V) / P(C,D | A,B) is therefore 0/0 exactly where the replacement puts new mass.
+    """
+    graph = reaction_mechanism_graph()
+    result = identify(graph, ReplaceMechanism("m1", replacement="m1_prime"))
+    assert isinstance(result, Identified)
+
+    model = DiscreteModel(
+        domains=DOMAINS,
+        joint=observational_joint_coupled(),
+        replacements={"m1_prime": replacement_kernel_table()},
+    )
+    truth = interventional_joint_replace_m1()
 
     for x in _assignments():
         key = tuple(x[v] for v in VARIABLES)
