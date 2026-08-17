@@ -164,3 +164,22 @@ def _run_all():
 
 if __name__ == "__main__":
     _run_all()
+
+
+def test_partially_determined_X_is_not_automatically_separated():
+    """X = {C, E} is not d*-separated from {F} given {D}.
+
+    D determines C via m1's declared equality, so C is constant given D and carries no
+    information. E is not determined: E -> m2 -> F is a direct open path. Concluding
+    separation because *some* element of X lies in the determination closure discards the
+    rest of X and licenses an independence that does not hold.
+    """
+    scm = reaction_network()
+    assert not d_separated(scm, {"E"}, {"F"}, {"D"})
+    assert not d_separated(scm, {"C", "E"}, {"F"}, {"D"})
+
+
+def test_fully_determined_X_is_separated():
+    """The sound half: if all of X lies in the closure, X is constant given Z."""
+    scm = reaction_network()
+    assert d_separated(scm, {"C"}, {"F"}, {"D"})
