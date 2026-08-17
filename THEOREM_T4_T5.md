@@ -46,18 +46,38 @@ Lemma 1.1's proof did not require observability of $f_m$ — only C1–C4 and no
 By the proof of T2 (`THEOREM_T2_T3.md` §2), $\mathrm{do}(\neg m^\star)$ removes the $m^\star$ factor from the product and inserts $P_0(v)$ factors for each orphaned output. The arithmetic is identical:
 
 $$
-P^{\neg m^\star}(V) = \frac{P(V)}{P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))} \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v).
+P^{\neg m^\star}(V) = \left[\prod_{v \in V^{\mathrm{exo}}} P(v)\right] \cdot \left[\prod_{m \in E \setminus \{m^\star\}} P(\mathrm{out}(m) \mid \mathrm{in}(m))\right] \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v).
 $$
 
-**Why this is identifiable.** The numerator $P(V)$ is the observational distribution. The denominator $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ is read off as a conditional in the observational distribution. The $P_0$ factors are part of the model specification. No part of the formula refers to $f_m$, $u_m$, or any quantity depending on whether $m^\star$ is observed or latent. □
+**Why this is identifiable.** Every surviving factor is a conditional read off the observational distribution, since all variables are observed; the $P_0$ factors are part of the model specification. No part of the formula refers to $f_m$, $u_m$, or any quantity depending on whether $m^\star$ is observed or latent. $\square$
 
-### What just happened (and why it is surprising)
+The quotient rewriting $P(V) / P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)) \cdot \prod_v P_0(v)$ is Corollary T2.1, and requires the target factor to be positive where the post-intervention law puts mass — a hypothesis that fails exactly when $m^\star$ is deterministic with coupled outputs. See Remark T2.2.
 
-Pearl's analogous question — when is $P(V \mid \mathrm{do}(X = x))$ identifiable in a Pearl ADMG with latent confounders — has a non-trivial answer (Shpitser-Pearl 2006: identifiable iff no hedge for $(X, V \setminus X)$). The hedge criterion is NP-hard to verify in the worst case and obstructs identifiability for many natural queries.
+### What just happened
+
+Pearl's analogous question — when is $P(V \mid \mathrm{do}(X = x))$ identifiable in a Pearl ADMG with latent confounders — has a non-trivial answer (Shpitser-Pearl 2006: identifiable iff no hedge for $(X, V \setminus X)$), and obstructs identifiability for many natural queries.
 
 T4 says: in the hypergraph framework, the analogous question for mechanism deletion has a **trivial** positive answer. **Mechanism deletion is always identifiable**, latent confounding notwithstanding, as long as the variables involved are observed.
 
-The technical reason: Pearl variable interventions cut a *single structural equation* and require accounting for back-door paths through latents. Hypergraph mechanism interventions cut a *whole mechanism factor* in the chain rule. The factor encapsulates the joint conditional distribution of the mechanism's outputs given its inputs — which, under noise independence, equals the corresponding causal mechanism factor exactly, regardless of upstream confounding. There is no back-door to close because the factorization already isolates the relevant component.
+That contrast is real but it is not mysterious, and it is worth stating exactly why, because the reason also bounds how much of this is new.
+
+**Proposition T4.0 (districts are mechanism output sets).** Let $\mathcal{M}$ satisfy C1–C4 with $V^{\mathrm{lat}} = \emptyset$, and let $B^\dagger(\mathcal{M})$ be the latent-projected bipartite ADMG of T5. Then the districts (c-components) of $B^\dagger(\mathcal{M})$ are exactly
+
+$$
+\{\mathrm{out}(m) : m \in E\} \;\cup\; \{\{v\} : v \in V^{\mathrm{exo}}\}.
+$$
+
+*Proof.* Bidirected edges in $B^\dagger(\mathcal{M})$ arise only by projecting out a mechanism noise $u_m$, whose children are exactly $\mathrm{out}(m)$; projection therefore yields a complete bidirected component on $\mathrm{out}(m)$ and no bidirected edge with any endpoint outside it. By C4 each endogenous $v$ has exactly one producing mechanism, so $v$ lies in exactly one such component. Exogenous variables are children of no mechanism and so are bidirected-isolated. Districts are the connected components of the bidirected subgraph, which are therefore as displayed. $\square$
+
+**Corollary T4.0.1.** Lemma 1.1 is the Tian-Pearl c-component factorization (Tian & Pearl 2002) specialized to this graph class: the c-factor of the district $\mathrm{out}(m)$ is $Q[\mathrm{out}(m)] = P(\mathrm{out}(m) \mid \mathrm{in}(m))$, and $P(V) = \prod_i Q[S_i]$ over districts $S_i$.
+
+**Corollary T4.0.2.** $\mathrm{do}(\neg m^\star)$ and $\mathrm{do}(m^\star \to m')$ replace the kernel of *one complete district*. T2/T3/T4 are then instances of the standard fact that replacing a single c-factor leaves the others invariant.
+
+So the technical content of "mechanism deletion is always identifiable" is: **C4 aligns the intervention unit with the district**. A Pearl variable intervention on a strict subset of a district must reason about the rest of that district, which is where hedges come from; a mechanism intervention never does, because there is no such thing as a mechanism intervention on part of a district. The asymmetry is a consequence of the modelling conventions, not a discovery about causal identification.
+
+What the framework contributes here is therefore not new identification power — §7 and the abstract already say so — but that the well-behaved unit has a *name* in the object language, so the query is a single operation rather than a multi-variable translation.
+
+**A correction.** Earlier drafts of this section asserted that "the hedge criterion is NP-hard to verify in the worst case." That is false and has been removed. Shpitser & Pearl's ID algorithm decides identifiability, and returns a hedge witness when it fails, in time polynomial in the size of the graph; Huang & Valtorta (2006) independently give a complete polynomial-time algorithm. The NP-hardness results in this literature concern different problems, such as selecting a minimum-cost intervention set. The genuine contrast is closed-form-versus-algorithmic, not tractable-versus-intractable.
 
 ---
 
@@ -159,11 +179,13 @@ This is the post-intervention distribution under "deletion of the latent mechani
 
 ## 5. Computational complexity
 
-T4's identifying expression is computable in $O(|V| + |E|)$ time on a HADMG: find the target mechanism, read off its incidence, retrieve $P_0$. There is no analogue of Pearl's ID-algorithm recursion or hedge search.
+T4's identifying expression is emitted in $O(|V| + |E|)$ time on a HADMG: walk the mechanism set once, copying every factor but the target's, and retrieve $P_0$. There is no analogue of Pearl's ID-algorithm recursion, and no search of any kind — the expression is read off the graph.
 
-T5's identifying expression is computable in time matching Shpitser-Pearl's ID algorithm on $B^\dagger(\mathcal{M})$ — polynomial in $|V| + |E|$ for fixed-size hedge searches, NP-hard in adversarial cases.
+T5's identifying expression is computed by running Shpitser-Pearl ID on $B^\dagger(\mathcal{M})$, which is polynomial in $|V| + |E|$; the algorithm is complete, and returns a hedge witness rather than failing to terminate when the query is not identifiable (Shpitser & Pearl 2006; Huang & Valtorta 2006).
 
-The computational asymmetry mirrors the theoretical asymmetry of §3: mechanism-level identifiability is *trivially easy*; variable-level is *as hard as Pearl*.
+So the asymmetry of §3 is **not** a complexity separation — both sides are polynomial. It is a separation between reading an answer off the graph and running an algorithm to search for one, and between a single closed form valid across observability regimes and a case analysis whose output shape depends on the graph. That is a real difference in the ergonomics and auditability of the result, and it is the one claimed here; an earlier draft overstated it as tractable-versus-intractable.
+
+The conditional-independence oracle of T1 is likewise polynomial: `src/causal_hypergraphs/separation` decides d*-separation by Bayes-Ball reachability in $O(|V| + |E|)$, visiting each (node, direction) state at most once. Deciding it by enumerating simple paths would be exponential — the bipartite blowup of a chain of $k$ branching mechanisms has $2^k$ of them.
 
 ---
 
@@ -223,5 +245,8 @@ The roadmap that remains:
 
 - Shpitser, I. & Pearl, J. (2006). "Identification of conditional interventional distributions." *UAI 22*.
 - Tian, J. & Pearl, J. (2002). "A general identification condition for causal effects." *AAAI 18*.
+- Huang, Y. & Valtorta, M. (2006). "Pearl's calculus of intervention is complete." *UAI 22*.
+- Tian, J. & Pearl, J. (2001). "Causal discovery from changes." *UAI 17*. — mechanism change as an intervention primitive; the closest prior art to `do(m -> m')`.
+- Correa, J. & Bareinboim, E. (2020). "A calculus for stochastic interventions: soft interventions and transportability." *AAAI 34*. — sigma-calculus; soft interventions replace a mechanism with another kernel, and are strictly more general than `do(m -> m')`, which additionally pins `rho(m') = rho(m)`.
 - Pearl, J. (2009). *Causality* (2nd ed.). Cambridge University Press, Ch. 3.
 - Bareinboim, E. & Pearl, J. (2016). "Causal inference and the data-fusion problem." *PNAS* 113.
