@@ -244,12 +244,41 @@ def _identify_replace(
 
     theorem = _theorem(graph, observed, replacement=True)
     replacement = ReplacementFactor(query.replacement, target.outputs, given=target.inputs)
-    common = CORE_ASSUMPTIONS + (
+
+    # do(m -> m') is defined only for rho(m') = rho(m). When the caller supplies the
+    # replacement's incidence there is something to check, so check it and discharge the
+    # certificate; with only a name there is not, and the assumption is the honest outcome.
+    incidence_assumptions: tuple[Assumption, ...] = (
         Assumption(
             "Replacement incidence",
             "Replacement mechanism has the same inputs and outputs.",
         ),
-        Assumption("Observed boundary", "Target mechanism inputs and outputs are observed."),
+    )
+    incidence_steps: tuple[ProofStep, ...] = ()
+    if query.incidence is not None:
+        if (
+            query.incidence.inputs != target.inputs
+            or query.incidence.outputs != target.outputs
+        ):
+            raise ValueError(
+                f"Replacement {query.replacement!r} does not preserve the typed incidence of "
+                f"{query.target!r}: expected inputs {list(target.inputs)} and outputs "
+                f"{list(target.outputs)}, got inputs {list(query.incidence.inputs)} and "
+                f"outputs {list(query.incidence.outputs)}."
+            )
+        incidence_assumptions = ()
+        incidence_steps = (
+            ProofStep(
+                "Verify replacement incidence",
+                f"rho({query.replacement}) = rho({query.target}) = "
+                f"({','.join(target.inputs)}) -> ({','.join(target.outputs)}).",
+            ),
+        )
+
+    common = (
+        CORE_ASSUMPTIONS
+        + incidence_assumptions
+        + (Assumption("Observed boundary", "Target mechanism inputs and outputs are observed."),)
     )
 
     if observed == graph.variable_set:
@@ -268,6 +297,7 @@ def _identify_replace(
         )
         derivation = (
             ProofStep("Validate graph", "C1-C4 passed during MechanismGraph construction."),
+            *incidence_steps,
             ProofStep(
                 "Factorize",
                 "Lemma 1.1: P(V) is the product of exogenous marginals and one joint "
@@ -300,6 +330,7 @@ def _identify_replace(
     )
     derivation = (
         ProofStep("Validate graph", "C1-C4 passed during MechanismGraph construction."),
+        *incidence_steps,
         ProofStep(
             "Read old factor",
             f"P({','.join(target.outputs)} | {','.join(target.inputs)}) is observable.",
