@@ -13,6 +13,11 @@ dependencies = [
   "numpy>=1.24",
 ]
 
+[tool.hatch.build.targets.wheel]
+# Declared rather than inferred: the distribution name is `causal-hypergraphs` and the
+# package lives under src/, so state the mapping instead of relying on backend heuristics.
+packages = ["src/causal_hypergraphs"]
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
