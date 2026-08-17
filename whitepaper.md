@@ -62,6 +62,16 @@ The framework builds directly on Pearl's structural causal model machinery (Pear
 
 The hedge-obstruction characterization of Shpitser-Pearl 2006 is the standard against which we compare. Our hyper-hedge (§7) is a structural lift of their hedge through the bipartite blowup; we conjecture a corresponding completeness theorem and outline what would be required to prove it.
 
+Under C1–C4 the connection is tighter than a comparison. Proposition T4.0 (`THEOREM_T4_T5.md`) shows that the districts of the latent-projected bipartite ADMG are exactly the mechanism output sets $\{\mathrm{out}(m)\}$, so Lemma 1.1 *is* the Tian-Pearl c-component factorization for this graph class, and mechanism interventions are exactly the interventions that replace one complete district's kernel. Our identifiability results are corollaries of that alignment rather than independent theory; what the formalism adds is that the well-behaved unit is named in the object language.
+
+### 2.1.1 Mechanism change and soft interventions
+
+The operation $\mathrm{do}(m \to m')$ is not new, and we should be precise about what is. Tian & Pearl (2001) introduced *mechanism change* as an intervention primitive and used it for causal discovery. Correa & Bareinboim (2020) develop the $\sigma$-calculus for *soft* (stochastic, conditional) interventions, in which a structural function is replaced by another kernel; they give an identification algorithm and completeness results for soft transportability. Eberhardt & Scheines (2007) analyse soft versus hard interventions for discovery. Dawid's decision-theoretic framework and Spirtes-Glymour-Scheines policy variables express related ideas in different notation.
+
+Measured against that literature, the $\sigma$-intervention is strictly more general than ours: it may change a mechanism's parent set, whereas $\mathrm{do}(m \to m')$ pins $\rho(m') = \rho(m)$. Our intervention space is in that sense a *subset*, not a superset, and the same is true of $\mathrm{do}(\neg m)$, which is a $\sigma$-intervention on $\mathrm{out}(m)$ with the product kernel $\prod_v P_0(v)$.
+
+Two things remain ours. First, incidence preservation is a genuine restriction with content — it is what makes "the same reaction, catalysed differently" a well-typed query and "a different reaction" a type error, which is the discipline a $\sigma$-intervention does not impose. Second, and more importantly, the unit of intervention is a first-class named object with a declared input/output boundary, so a query names a mechanism rather than a set of variables plus a kernel. That is a claim about vocabulary and auditability, not about expressive power or identification strength, and it should not be read as either.
+
 ### 2.2 Beyond Pearl: cyclic, kernel, and categorical extensions
 
 Several lines of prior work have relaxed Pearl's structural assumptions. Bongers, Forré & Mooij (2018) develop SCM theory under cyclic structure; their fixed-point semantics will be relevant when we relax convention C1. Halpern's actual-causality framework (Halpern 2016) loosens the structural-equation form in ways that partially accommodate joint mechanisms but does not commit to a hypergraph formalism.

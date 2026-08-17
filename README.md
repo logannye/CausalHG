@@ -186,6 +186,18 @@ compiler refuses rather than returning an unsound estimand.
 - Canonical reaction-network examples.
 - Compatibility test coverage for the existing `minimal_model/` reference code.
 
+Additionally:
+
+- Finite-discrete semantics for the estimand AST
+  (`causal_hypergraphs.semantics`), so a compiled estimand can be *evaluated*
+  and compared against an interventional law rather than against an expected
+  string. Undefined quantities raise rather than becoming `nan`.
+- Kernel-form (division-free) identifiers under full observability, defined even
+  when the target mechanism factor is singular.
+- `O(V + E)` d*-separation by Bayes-Ball reachability.
+- Verified replacement incidence when a `Mechanism` is supplied, which
+  discharges the `rho(m') = rho(m)` certificate into a derivation step.
+
 ## Not Yet Supported
 
 - Complete T7 Pearl-ID reduction beyond the current front-door vertical slice.
@@ -194,6 +206,13 @@ compiler refuses rather than returning an unsound estimand.
 - General functional-determination closure beyond declared equality rules.
 - Cyclic mechanism graphs.
 - Markov-kernel mechanisms.
+- Joint per-mechanism fallback kernels. `P0` is a product of per-variable laws,
+  so `delete(m)` necessarily renders `out(m)` mutually independent and cannot
+  express a post-deletion law that preserves coupling among the orphaned
+  outputs. The generalization to `P0^m(out(m))` is stated in
+  `THEOREM_T2_T3.md` Remark T3.3; every result goes through with it.
+- Estimator compilation: the discrete semantics evaluates an estimand against a
+  supplied model, but nothing estimates the primitives from samples.
 - Transition/Petri-net semantics with multiple producers.
 - Production-grade estimators over empirical data.
 
