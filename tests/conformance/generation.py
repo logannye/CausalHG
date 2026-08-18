@@ -213,16 +213,27 @@ class RandomModel:
             )
         return result
 
-    def marginalize_to_observed(self, law: Mapping[Point, float]) -> dict[Point, float]:
-        """Sum a law over the hidden variables, re-keyed in `self.observed` order."""
+    def marginalize_to(
+        self, law: Mapping[Point, float], names: Sequence[str]
+    ) -> dict[Point, float]:
+        """Sum a law over every variable outside `names`, re-keyed in `names` order.
+
+        `law` is keyed in `self.variables` order. Marginal conformance needs an arbitrary
+        subset rather than just the observed set, so the observed case delegates here
+        instead of carrying a second copy of the same sum.
+        """
         index = {name: position for position, name in enumerate(self.variables)}
-        positions = [index[v] for v in self.observed]
+        positions = [index[name] for name in names]
         result: dict[Point, float] = {
-            combo: 0.0 for combo in itertools.product(*(BINARY for _ in self.observed))
+            combo: 0.0 for combo in itertools.product(*(BINARY for _ in names))
         }
         for key, value in law.items():
             result[tuple(key[p] for p in positions)] += value
         return result
+
+    def marginalize_to_observed(self, law: Mapping[Point, float]) -> dict[Point, float]:
+        """Sum a law over the hidden variables, re-keyed in `self.observed` order."""
+        return self.marginalize_to(law, self.observed)
 
     def replacement_table(self, target: str) -> dict[tuple[Point, Point], float]:
         """The replacement kernel keyed as `DiscreteModel.replacements` expects.

@@ -63,6 +63,9 @@ def sweep() -> dict[str, int]:
         "refused": 0,
         "hidden_variable_models": 0,
         "non_factorizing_deletions": 0,
+        "marginal_queries": 0,
+        "marginal_identified": 0,
+        "marginal_verified": 0,
     }
     failures: list[str] = []
 
@@ -74,16 +77,52 @@ def sweep() -> dict[str, int]:
         tally["non_factorizing_deletions"] += len(model.non_factorizing_fallbacks())
 
         for spec in model.mechanisms:
-            cases = (
-                (DeleteMechanism(spec.name), model.interventional_delete(spec.name), False),
+            # Computed once per mechanism: the exact interventional laws are the expensive
+            # part, and every marginal case below is a different projection of the same law.
+            delete_truth = model.interventional_delete(spec.name)
+            replace_truth = model.interventional_replace(spec.name)
+            replacement = f"{spec.name}_prime"
+
+            # (query, exact law, uses a replacement kernel, points to check, is marginal)
+            cases: list[tuple[object, dict, bool, tuple[str, ...], bool]] = [
+                (DeleteMechanism(spec.name), delete_truth, False, model.observed, False),
                 (
-                    ReplaceMechanism(spec.name, f"{spec.name}_prime"),
-                    model.interventional_replace(spec.name),
+                    ReplaceMechanism(spec.name, replacement),
+                    replace_truth,
                     True,
+                    model.observed,
+                    False,
                 ),
-            )
-            for query, full_truth, with_replacement in cases:
+            ]
+            # One marginal query per observed variable. Until now the sweep ran only the
+            # full-joint pair, so `outcomes=` -- and with it the whole ancestral reduction,
+            # the single largest piece of the compiler -- was never exercised here at all.
+            # `is_marginal` is carried rather than inferred from `variables != observed`,
+            # which would misclassify a model that happens to observe one variable.
+            for outcome in model.observed:
+                cases.append(
+                    (
+                        DeleteMechanism(spec.name, outcomes={outcome}),
+                        delete_truth,
+                        False,
+                        (outcome,),
+                        True,
+                    )
+                )
+                cases.append(
+                    (
+                        ReplaceMechanism(spec.name, replacement, {outcome}),
+                        replace_truth,
+                        True,
+                        (outcome,),
+                        True,
+                    )
+                )
+
+            for query, full_truth, with_replacement, variables, is_marginal in cases:
                 tally["queries"] += 1
+                if is_marginal:
+                    tally["marginal_queries"] += 1
                 result = identify(graph, query)
 
                 if isinstance(result, Unknown):
@@ -91,14 +130,18 @@ def sweep() -> dict[str, int]:
                     continue
                 assert isinstance(result, Identified), f"seed {seed}: unexpected {result!r}"
                 tally["identified"] += 1
+                if is_marginal:
+                    tally["marginal_identified"] += 1
                 branch = f"theorem:{result.theorem}"
                 tally[branch] = tally.get(branch, 0) + 1
 
                 discrete = _discrete_model(model, spec.name, with_replacement=with_replacement)
-                truth = model.marginalize_to_observed(full_truth)
-                report = check_estimand(result.expression, discrete, truth, model.observed)
+                truth = model.marginalize_to(full_truth, variables)
+                report = check_estimand(result.expression, discrete, truth, variables)
 
-                where = f"seed {seed} / {spec.name} ({spec.shape}) / {result.theorem}"
+                where = f"seed {seed} / {spec.name} ({spec.shape}) / {result.theorem}" + (
+                    f" / outcome {variables[0]}" if is_marginal else " / full joint"
+                )
                 if report.mismatches or report.nonzero_where_truth_zero:
                     failures.append(f"{where}: {report.summary()}")
                 elif report.undefined_somewhere:
@@ -111,6 +154,8 @@ def sweep() -> dict[str, int]:
                         tally["skipped_positivity"] += 1
                 else:
                     tally["verified"] += 1
+                    if is_marginal:
+                        tally["marginal_verified"] += 1
 
     tally["failures"] = len(failures)  # type: ignore[assignment]
     if failures:
@@ -133,9 +178,27 @@ def test_the_sweep_is_not_vacuous(sweep) -> None:
     Without this, tightening a refusal condition or breaking evaluation could silently
     turn the sweep into a no-op that still reports success.
     """
-    assert sweep["queries"] >= 400, sweep
-    assert sweep["verified"] >= 300, sweep
+    assert sweep["queries"] >= 5_000, sweep
+    assert sweep["verified"] >= 4_000, sweep
     assert sweep["verified"] >= 0.5 * sweep["identified"], sweep
+
+
+def test_the_sweep_exercises_marginal_queries(sweep) -> None:
+    """`outcomes=` was not exercised here at all until this lane existed.
+
+    Every query the sweep issued was a full joint, so the ancestral reduction -- the single
+    largest piece of the compiler, and the one the post-intervention closure rewrote -- was
+    verified only by `test_marginal_queries.py`. The gap was not theoretical: reinstating
+    the co-output defect that reduction shipped with leaves this file green before these
+    cases and produces 268 nonconforming estimands after.
+
+    The ratio matters as much as the count. A handful of marginal cases bolted onto a
+    full-joint sweep would satisfy a floor while leaving the reduction essentially
+    unexercised, so the marginal lane is required to carry most of the verified queries.
+    """
+    assert sweep["marginal_queries"] >= 4_000, sweep
+    assert sweep["marginal_verified"] >= 3_000, sweep
+    assert sweep["marginal_verified"] >= 0.5 * sweep["verified"], sweep
 
 
 def test_the_sweep_exercises_the_hard_paths(sweep) -> None:
