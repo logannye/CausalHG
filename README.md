@@ -96,12 +96,25 @@ independent by C2, so its marginal factorizes on its own. The question is theref
 the *query's closure* is acyclic:
 
 ```python
+graph = MechanismGraph(
+    variables={"a", "b", "Y", "q", "R"},
+    mechanisms={
+        "m1": {"inputs": {"a"}, "outputs": {"b"}},    # m1 and m2 form a two-cycle
+        "m2": {"inputs": {"b"}, "outputs": {"a"}},
+        "m3": {"inputs": {"b"}, "outputs": {"Y"}},    # downstream of the cycle
+        "far": {"inputs": {"q"}, "outputs": {"R"}},   # disjoint from it
+    },
+)
+
 graph.cyclic_mechanisms          # frozenset({'m1', 'm2'})
-graph.mechanism_components()     # (('m1', 'm2'), ('far',))
+graph.mechanism_components()     # (('far',), ('m1', 'm2'), ('m3',))
 
 identify(graph, DeleteMechanism("far", outcomes={"R"}))   # Identified — the loop is elsewhere
 identify(graph, DeleteMechanism("m1", outcomes={"Y"}))    # Unknown — the loop is in the way
 ```
+
+Components come back sorted, with each component's members sorted, so a cost or a refusal
+never varies with dictionary ordering.
 
 Both halves are measured. With a two-cycle downstream the estimand still matches the true
 post-deletion law; with the cycle inside the closure the same machinery is **68% wrong**,
@@ -231,6 +244,8 @@ largest object built is a table over one *bucket* — the variables that meet at
 elimination step — rather than over the whole ancestry.
 
 ```python
+from causal_hypergraphs import plan_elimination
+
 plan = plan_elimination(q.expression, {name: (0, 1) for name in genes})
 plan.summary()
 # 'eliminate 60 variable(s) at induced width 1; largest table 4 entries,
@@ -307,11 +322,15 @@ check_covariates(graph, DeleteMechanism("knockdown"), "IFNG",
 ```
 
 ```text
+Conditioning around do(knockdown) with outcome 'IFNG':
+
   Structural -- post-treatment, no distributional assumption involved:
     !! exhaustion_marker: post-treatment: reachable from 'knockdown' in the graph, so
-       conditioning on it removes part of the effect being measured.
+       conditioning on it removes part of the effect being measured. Structural, not an
+       assumption.
 
-  Warning -- may open a back-door path; rests on faithfulness, so this is not a proof:
+  Warning -- may open a back-door path; rests on faithfulness, so this is not a proof of
+  harm:
     (none)
 
   Admissible: ['donor', 'stim', 'batch']
@@ -357,8 +376,8 @@ rather than present as `nan`:
 ```text
 Checked against the data:
   Downstream positivity: FAIL
-  3 of 16 point(s) undefined across 1 empty stratum/strata
-  ! P(F | C,E) undefined at C=1, E=1 (3 point(s) unreachable)
+  16 of 64 point(s) undefined across 1 empty stratum/strata
+  ! P(F | C,E) undefined at C=1, E=1 (16 point(s) unreachable)
 ```
 
 Even when every certificate holds, `support.min_stratum_count` reports the sparsest data
@@ -526,7 +545,7 @@ theorem, its assumptions, and its derivation attached.
 
 ## Status and known gaps
 
-The suite is `296 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+The suite is `306 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
 
 Correctness is established by a randomized differential harness (`tests/conformance/`)
 rather than by comparing rendered strings. It generates models satisfying C1–C4 with
@@ -534,11 +553,13 @@ strictly positive, structurally sparse, and singular ("all outputs equal") kerne
 computes exact interventional laws the compiler never sees, and checks the compiler
 against them. On the current sweep:
 
-- **Identifiers.** 750 identified queries across all five theorem branches
-  (`T2`/`T3`/`T4`/`T4.1`/`T6`); 716 verified pointwise against the exact interventional
-  law, and 34 skipped because a positivity assumption the result *itself records* fails
-  in that model. An estimand that cannot be evaluated while recording no such
-  assumption is a failure, not a skip.
+- **Identifiers.** 976 queries over 220 generated models; 821 identified across all five
+  theorem branches (`T2` 186 / `T3` 140 / `T4` 179 / `T4.1` 154 / `T6` 162), 788 verified
+  pointwise against the exact interventional law, and 33 skipped because a positivity
+  assumption the result *itself records* fails in that model. An estimand that cannot be
+  evaluated while recording no such assumption is a failure, not a skip. The branch mix is
+  gated: a branch `_theorem` can return that no model reaches fails the sweep, and the
+  population is parsed from the compiler rather than listed here.
 - **`d*`-separation.** 5,400 (X, Y, Z) triples, **zero unsound verdicts** — every
   claimed separation is an actual conditional independence in the model's own law. On
   models with strictly positive kernels, where faithfulness is generic, there were also

@@ -50,6 +50,7 @@ from .identification import (
     reduce_mechanism_query_to_stochastic_intervention,
     variable_node,
 )
+from .semantics import plan_elimination
 from .separation import (
     DeterminationRule,
     EqualityClosureRule,
@@ -109,6 +110,7 @@ __all__ = [
     "latent_project",
     "latent_project_to_variable_admg",
     "mechanism_node",
+    "plan_elimination",
     "reduce_mechanism_query_to_stochastic_intervention",
     "variable_node",
 ]

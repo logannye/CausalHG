@@ -23,6 +23,7 @@ are the empirical counterpart.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -179,3 +180,18 @@ def test_validity_of_declared_rules_is_load_bearing() -> None:
         "declaring equalities that the kernels do not satisfy produced no false "
         "separations, so T1's validity hypothesis is not load-bearing as stated"
     )
+
+    # The contrast is the evidence, so both sides are pinned rather than just the
+    # non-empty one. A bare truthiness check still passes if the effect shrinks from 142
+    # false verdicts to one, at which point "load-bearing" overstates a rounding error --
+    # and the README publishes the figure, so nothing should drift underneath it.
+    false_separations = sum(
+        int(found.group(1))
+        for entry in mendacious.unsound
+        if (found := re.search(r"(\d+)/45 unsound", entry))
+    )
+    assert (len(mendacious.unsound), false_separations) == (22, 142), (
+        f"{false_separations} false separation(s) over {len(mendacious.unsound)} model(s); "
+        f"the published figure is 142 over 22 of {MODEL_COUNT}"
+    )
+    assert not _sweep().unsound, "valid declarations must produce zero unsound verdicts"

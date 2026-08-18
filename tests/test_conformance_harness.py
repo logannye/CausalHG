@@ -147,6 +147,7 @@ def test_harness_detects_the_historical_separation_bug() -> None:
         return d_separated(graph, set(x), set(y), given=set(z))
 
     caught = 0
+    models_flagged = 0
     for seed in range(60):
         model = generate_model(seed)
         triples = separation_triples(model.variables, limit=45, seed=seed)
@@ -154,8 +155,16 @@ def test_harness_detects_the_historical_separation_bug() -> None:
             model.graph(), model.joint(), model.variables, triples, oracle=legacy_oracle
         )
         caught += len(report.unsound)
+        models_flagged += 1 if report.unsound else 0
 
     assert caught > 0, (
         "the conformance sweep did not flag the historical partial-determination bug; "
         "it cannot be trusted to catch a regression of it"
+    )
+    # Pinned, not merely non-zero. `> 0` would still pass if the sweep's sensitivity to
+    # this defect collapsed to a single triple in a single model, which is the state a
+    # fail-proof is supposed to detect rather than survive. The README publishes 63.
+    assert (caught, models_flagged) == (63, 12), (
+        f"the legacy oracle was caught {caught} time(s) over {models_flagged} model(s); "
+        "the published figure is 63 over 12 of 60"
     )
