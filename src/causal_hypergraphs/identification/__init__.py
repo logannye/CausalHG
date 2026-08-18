@@ -1,4 +1,9 @@
 from .api import ancestral_closure, identify, identify_expectation
+from .covariates import (
+    CovariateReport,
+    CovariateVerdict,
+    check_covariates,
+)
 from .pearl_id import ADMG, PearlHedgeWitness, PearlIDBackend, PearlIDQuery, identify_effect
 from .queries import DeleteMechanism, ReplaceMechanism
 from .results import (
@@ -28,11 +33,14 @@ from .t7 import (
 )
 
 __all__ = [
+    "check_covariates",
     "ancestral_closure",
     "ADMG",
     "Assumption",
     "BipartiteADMG",
     "BipartiteDAG",
+    "CovariateReport",
+    "CovariateVerdict",
     "DeleteMechanism",
     "HedgeWitness",
     "HyperHedgeWitness",
