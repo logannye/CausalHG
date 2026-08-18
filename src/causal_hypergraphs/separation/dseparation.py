@@ -119,6 +119,18 @@ def d_separated(
     variable fixed by the conditioning set blocks paths through it even when the caller
     did not name it.
     """
+    if not graph.is_mechanism_acyclic():
+        raise ValueError(
+            "d*-separation has no soundness guarantee on a cyclic mechanism graph. "
+            f"Mechanisms on a cycle: {sorted(graph.cyclic_mechanisms)}. THEOREM_T1.md "
+            "Lemma 2.1 establishes that the noise-augmented blowup is a DAG, and its "
+            "proof ends 'C1 forbids cycles in G_E'; Step 1 of the soundness proof then "
+            "relies on ancestral sampling over that DAG for the Markov property. Without "
+            "C1 the lemma is false and a returned verdict would have nothing behind it -- "
+            "in either direction, since callers read a separation oracle both ways. "
+            "sigma-separation (Forre & Mooij) is the cyclic replacement and is not "
+            "implemented."
+        )
     x_set = _as_set(x)
     y_set = _as_set(y)
     z_set = _as_set(given)

@@ -313,6 +313,15 @@ def latent_project_to_variable_admg(graph: MechanismGraph) -> ADMG:
     way; the flag records that its functional form is unknown, which is a question about
     estimation rather than about the graph.
     """
+    if not graph.is_mechanism_acyclic():
+        raise ValueError(
+            "A Pearl ADMG is acyclic by definition, so a cyclic mechanism graph has no "
+            "projection into one. Mechanisms on a cycle: "
+            f"{sorted(graph.cyclic_mechanisms)}. Identification for cyclic systems needs "
+            "sigma-separation and the simple-SCM machinery, neither of which is "
+            "implemented; `identify` refuses such queries before reaching this function."
+        )
+
     observed = graph.observed_set
     produced = graph.produced_variables
 

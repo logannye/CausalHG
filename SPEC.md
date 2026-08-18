@@ -136,6 +136,23 @@ bound outside it. `Identified.aliases` records what each copy stands for, and
 String rendering is for human inspection only. Tests that assert compiler
 semantics should prefer AST properties when possible.
 
+## Cycles
+
+`MechanismGraph` accepts a cyclic mechanism dependency graph. C1 is a condition on a
+*query*, not on the object: Lemma 1.1 is applied only to the ancestral closure of the
+outcomes, and that closure being acyclic is what the proof needs.
+
+`identify` refuses a query when a mechanism on a cycle supplies a kernel the query needs --
+that is, when a cyclic mechanism's outputs lie inside the closure. The condition is
+sufficient, not necessary: a factor that is summed away integrates to one whatever its
+kernel is, so some refused queries are in fact answerable.
+
+An identification on a cyclic graph replaces `C1` with `C1 (local)` and adds `Solvability`,
+which is unverifiable by the compiler in the same way C2 is.
+
+`d*`-separation, covariate admissibility and the latent projection raise on a cyclic graph
+rather than answering.
+
 ## Theorem Dispatch
 
 Let `O` be the observed-variable set used for identification. If the caller does
