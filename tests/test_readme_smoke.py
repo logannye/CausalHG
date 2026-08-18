@@ -210,3 +210,40 @@ def test_readme_empty_stratum_block_reports_the_counts_it_prints() -> None:
     assert "! P(F | C,E) undefined at C=1, E=1 (16 point(s) unreachable)" in summary
     # Absent, never nan: the affected points are not in `values` at all.
     assert (0, 1, 1, 0, 1, 1) not in est.values
+
+
+def test_readme_open_back_door_block_prints_what_the_readme_shows() -> None:
+    """The third covariate finding, gated like the two the README already showed.
+
+    The README block is a claim about output, and the last three claims it made about this
+    module's output were wrong rather than stale. This one is checked line for line --
+    including `Closes it: ['donor']`, which is the whole point of the section: a check that
+    only asks "does conditioning OPEN a path?" cannot name the covariate that closes one.
+    """
+    graph = MechanismGraph(
+        variables={"donor", "stim", "batch", "TF", "exhaustion_marker", "IFNG"},
+        mechanisms={
+            # `donor` now feeds the outcome as well as the target: an open back-door path.
+            "knockdown": {"inputs": {"donor", "stim"}, "outputs": {"TF"}},
+            "m_marker": {"inputs": {"TF"}, "outputs": {"exhaustion_marker"}},
+            "m_ifng": {"inputs": {"TF", "batch", "donor"}, "outputs": {"IFNG"}},
+        },
+    )
+
+    report = check_covariates(
+        graph,
+        DeleteMechanism("knockdown"),
+        "IFNG",
+        ["donor", "stim", "exhaustion_marker", "batch"],
+    )
+    summary = report.summary()
+
+    assert report.back_door_open
+    assert report.blocks_path == ("donor",)
+    assert "there is an open back-door path, so the effect is confounded before any" in summary
+    assert "Closes it: ['donor']" in summary
+    assert "reported as undecided, not as clean" in summary
+    # And the invariant the whole repair exists for, asserted on the README's own example.
+    for verdict in report.verdicts:
+        if not verdict.path_test_applicable:
+            assert not verdict.admissible, verdict.covariate

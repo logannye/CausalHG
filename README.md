@@ -370,6 +370,28 @@ sound but complete only under faithfulness, it is a warning rather than a proof 
 `admissible` means only that neither failure mode was detected. It is not a certificate
 that adjusting for the covariate yields an unbiased estimate.
 
+There is a third case, and getting it wrong is how a check becomes decoration. Path opening
+asks whether conditioning *breaks* a separation that held — so when the target and the
+outcome are already d-connected in the back-door graph, which is what any unmeasured common
+cause produces, there is no separation to break and the question has no answer. The report
+says so rather than reporting silence as a clean bill of health:
+
+```text
+Conditioning around do(knockdown) with outcome 'IFNG':
+
+  'knockdown' and 'IFNG' are d-connected in the back-door graph given nothing:
+  there is an open back-door path, so the effect is confounded before any covariate is chosen.
+    Closes it: ['donor']
+  For the rest, no path-level verdict is reachable -- reported as undecided, not as clean.
+```
+
+`report.back_door_open` carries the graph-level finding, `report.blocks_path` names the
+covariates that *close* the open path — the reason adjustment sets exist, and something a
+check that only ever asks "does this open a path?" cannot express — and `report.undecided`
+names the rest. A covariate whose verdict was not reachable is never reported as admissible.
+A covariate that is not in `observed_set` is never admissible either, however well it does
+in the graph: the graph does not know what the assay measured.
+
 Both findings are checked against exact ground truth over 120 generated models — 2,596
 verdicts. Post-treatment is structural, so it is verified in *both* directions against a
 reachability walk written independently of the library's. Path-opening is verified in the

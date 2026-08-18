@@ -42,6 +42,30 @@ class CovariateVerdict:
     post_treatment: bool
     opens_path: bool
     reason: str
+    blocks_path: bool = False
+    """Conditioning on it *closes* a back-door path that was open.
+
+    The positive finding, and the reason adjustment sets exist. Only reachable when the
+    back-door path is open to begin with, which is why the old code -- which asked solely
+    whether a covariate opens a path -- could not express it.
+    """
+    observed: bool = True
+    """Whether the covariate is in the model's observed set.
+
+    Unobserved is a *structural* refusal, not an undecided one -- you cannot condition on
+    what was not measured, and no further evidence would change that. It shares
+    `path_test_applicable=False` with the undecided case because neither reached a path
+    verdict, which is what that flag is for; the two are separated here so the report does
+    not file a hard fact under a heading that says the question was unanswerable.
+    """
+    path_test_applicable: bool = True
+    """Whether a path-level verdict was actually reached for this covariate.
+
+    False means the question could not be decided here, not that it was decided
+    favourably, and `admissible` is never True alongside it. Distinguishing the two is the
+    whole repair: a check that runs, passes, and cannot report is worse than no check,
+    because it is read as a clean bill of health.
+    """
 
     def __str__(self) -> str:
         mark = "ok " if self.admissible else "!! "
@@ -55,10 +79,31 @@ class CovariateReport:
     target: str
     outcome: str
     verdicts: tuple[CovariateVerdict, ...]
+    back_door_open: bool = False
+    """Whether target and outcome are d-connected in the back-door graph given nothing.
+
+    A fact about the *query*, not about any covariate, and the dominant one when true:
+    some non-causal path is open, so the effect is confounded until something closes it.
+    It is reported on the report rather than repeated per covariate because that is where
+    it belongs, and because leaving it unsaid is what made the old output read as clean.
+    """
 
     @property
     def admissible(self) -> tuple[str, ...]:
         return tuple(v.covariate for v in self.verdicts if v.admissible)
+
+    @property
+    def blocks_path(self) -> tuple[str, ...]:
+        return tuple(v.covariate for v in self.verdicts if v.blocks_path)
+
+    @property
+    def undecided(self) -> tuple[str, ...]:
+        """Covariates for which no path-level verdict was reached."""
+        return tuple(
+            v.covariate
+            for v in self.verdicts
+            if not v.path_test_applicable and not v.post_treatment and v.observed
+        )
 
     @property
     def post_treatment(self) -> tuple[str, ...]:
@@ -71,11 +116,31 @@ class CovariateReport:
     def summary(self) -> str:
         lines = [
             f"Conditioning around do({self.target}) with outcome {self.outcome!r}:",
+        ]
+        if self.back_door_open:
+            closers = list(self.blocks_path)
+            lines.extend([
+                "",
+                f"  {self.target!r} and {self.outcome!r} are d-connected in the back-door "
+                "graph given nothing:",
+                "  there is an open back-door path, so the effect is confounded before any "
+                "covariate is chosen.",
+                f"    Closes it: {closers}" if closers
+                else "    No candidate offered closes it.",
+                "  For the rest, no path-level verdict is reachable -- reported as "
+                "undecided, not as clean.",
+            ])
+        lines.extend([
             "",
             "  Structural -- post-treatment, no distributional assumption involved:",
-        ]
+        ])
         blocked = [v for v in self.verdicts if v.post_treatment or not v.admissible]
-        structural = [v for v in blocked if v.post_treatment or not v.opens_path]
+        undecided = set(self.undecided)
+        structural = [
+            v
+            for v in blocked
+            if (v.post_treatment or not v.opens_path) and v.covariate not in undecided
+        ]
         lines.extend(f"    {v}" for v in structural) if structural else lines.append(
             "    (none)"
         )
@@ -86,6 +151,13 @@ class CovariateReport:
         )
         warnings = [v for v in self.verdicts if v.opens_path and not v.post_treatment]
         lines.extend(f"    {v}" for v in warnings) if warnings else lines.append("    (none)")
+        if self.undecided:
+            lines.append("")
+            lines.append(
+                "  Undecided -- the path test could not reach a verdict for these; this is "
+                "not a clean result:"
+            )
+            lines.extend(f"    {v}" for v in self.verdicts if v.covariate in self.undecided)
         lines.append("")
         lines.append(f"  Admissible: {list(self.admissible) or '(none)'}")
         return "\n".join(lines)
@@ -207,7 +279,59 @@ def check_covariates(
             )
             continue
 
-        opens = separated_alone and not d_separated(back_door, target, outcome, (name,))
+        if name not in graph.observed_set:
+            # A latent variable can be the graphically ideal covariate -- W below closes
+            # the back-door path perfectly -- and you still cannot condition on it. The
+            # graph does not know what the assay measured, so this is checked separately
+            # rather than inferred.
+            verdicts.append(
+                CovariateVerdict(
+                    covariate=name,
+                    admissible=False,
+                    post_treatment=False,
+                    opens_path=False,
+                    observed=False,
+                    path_test_applicable=False,
+                    reason=(
+                        "not observed in this model, so it cannot be conditioned on "
+                        "whatever the graph says about it."
+                    ),
+                )
+            )
+            continue
+
+        given = d_separated(back_door, target, outcome, (name,))
+        if not separated_alone:
+            # The back-door path is already open, so "does conditioning OPEN one" has no
+            # verdict to give -- the old code silently answered "no" here and called the
+            # covariate admissible. The answerable question is whether it CLOSES the path.
+            closes = given
+            verdicts.append(
+                CovariateVerdict(
+                    covariate=name,
+                    admissible=closes,
+                    post_treatment=False,
+                    opens_path=False,
+                    blocks_path=closes,
+                    path_test_applicable=closes,
+                    reason=(
+                        f"closes an open back-door path: conditioning on it d-separates "
+                        f"{target!r} from {outcome!r} in the graph with {target!r}'s "
+                        "outgoing edges severed. Rests on faithfulness in the same way the "
+                        "opening warning does."
+                    )
+                    if closes
+                    else (
+                        f"undecided: {target!r} and {outcome!r} are already d-connected in "
+                        "the back-door graph, so no covariate can be cleared of opening a "
+                        "path here, and this one does not close the open path either. Not "
+                        "a clean result -- the question was not answerable, not answered."
+                    ),
+                )
+            )
+            continue
+
+        opens = not given
         verdicts.append(
             CovariateVerdict(
                 covariate=name,
@@ -228,4 +352,9 @@ def check_covariates(
             )
         )
 
-    return CovariateReport(target=target, outcome=outcome, verdicts=tuple(verdicts))
+    return CovariateReport(
+        target=target,
+        outcome=outcome,
+        verdicts=tuple(verdicts),
+        back_door_open=not separated_alone,
+    )
