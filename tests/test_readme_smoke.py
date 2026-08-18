@@ -113,8 +113,23 @@ def test_readme_feedback_loop_block() -> None:
 
     assert graph.cyclic_mechanisms == frozenset({"m1", "m2"})
     assert graph.mechanism_components() == (("far",), ("m1", "m2"), ("m3",))
+
+    # The loop is in another component.
     assert isinstance(identify(graph, DeleteMechanism("far", outcomes={"R"})), Identified)
-    assert isinstance(identify(graph, DeleteMechanism("m1", outcomes={"Y"})), Unknown)
+
+    # Deleting m1 severs its own input, so the loop stops being upstream of anything the
+    # answer needs. This is the carve-out that makes feedback-upstream-of-a-knockdown
+    # answerable at all.
+    severed = identify(graph, DeleteMechanism("m1", outcomes={"Y"}))
+    assert isinstance(severed, Identified), severed
+    assert str(severed.expression) == "sum_{b} P(Y | b) * P0_m1(b)"
+    assert not ({"a"} & severed.expression.footprint()), severed.expression
+
+    # And its limit: deleting m2 breaks the cycle too, but the answer still needs m1's
+    # kernel, and for a mechanism on an observational cycle that conditional is not its
+    # structural kernel. `far` cannot reach Y at all, so it needs the whole loop.
+    assert isinstance(identify(graph, DeleteMechanism("m2", outcomes={"Y"})), Unknown)
+    assert isinstance(identify(graph, DeleteMechanism("far", outcomes={"Y"})), Unknown)
 
 
 def test_readme_covariate_block_prints_what_the_readme_shows() -> None:

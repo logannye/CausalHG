@@ -86,7 +86,10 @@ def test_the_footprint_of_a_query_scales_with_ancestry_not_system_size() -> None
     nearby = _identified(graph, DeleteMechanism("m0", outcomes={"v2"}))
 
     assert len(whole_system.expression.footprint()) == 31
-    assert len(nearby.expression.footprint()) == 3, nearby.expression
+    # Two, not three: the reduction closes over the *post-deletion* graph, so `v0` -- the
+    # input `m0` used to read -- is not required either. A deletion replaces that factor
+    # with a policy, so nothing above it can reach `v2`.
+    assert len(nearby.expression.footprint()) == 2, nearby.expression
     assert nearby.expression.scope() == frozenset({"v2"})
 
 

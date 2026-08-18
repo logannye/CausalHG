@@ -307,8 +307,11 @@ def test_a_summed_variable_must_be_supplied_to_the_model_even_though_no_caller_b
     )
     result = identify(graph, DeleteMechanism("m1", outcomes={"c"}))
     assert isinstance(result, Identified)
+    # The two sets still differ, which is the point -- `b` is summed and must have a
+    # domain, while no caller ever binds it. `a` is absent because deleting `m1` severs
+    # its own input, so the post-deletion closure never climbs to it.
     assert result.expression.scope() == frozenset({"c"})
-    assert result.expression.footprint() == frozenset({"a", "b", "c"})
+    assert result.expression.footprint() == frozenset({"b", "c"})
 
     records = [
         {"a": a, "b": b, "c": c}

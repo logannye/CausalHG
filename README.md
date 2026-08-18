@@ -93,7 +93,9 @@ nothing about any part of it could be asked.
 Lemma 1.1's proof needs acyclicity of the sub-system it is applied to, not of the ambient
 graph. An ancestrally-closed set of variables is self-contained and its noises are
 independent by C2, so its marginal factorizes on its own. The question is therefore whether
-the *query's closure* is acyclic:
+the *query's own closure* is acyclic — and that closure is taken on the **post-intervention**
+graph, because a deletion replaces its target's factor with a policy and so severs
+everything above it:
 
 ```python
 graph = MechanismGraph(
@@ -109,12 +111,29 @@ graph = MechanismGraph(
 graph.cyclic_mechanisms          # frozenset({'m1', 'm2'})
 graph.mechanism_components()     # (('far',), ('m1', 'm2'), ('m3',))
 
-identify(graph, DeleteMechanism("far", outcomes={"R"}))   # Identified — the loop is elsewhere
-identify(graph, DeleteMechanism("m1", outcomes={"Y"}))    # Unknown — the loop is in the way
+# the loop is in another component
+identify(graph, DeleteMechanism("far", outcomes={"R"}))   # Identified: P0_far(R)
+
+# deleting m1 severs its own input, so the loop is no longer upstream of anything needed
+identify(graph, DeleteMechanism("m1", outcomes={"Y"}))    # Identified:
+                                                          #   sum_{b} P(Y | b) * P0_m1(b)
+
+# but deleting m2 still needs m1's kernel, and m1 is on the cycle
+identify(graph, DeleteMechanism("m2", outcomes={"Y"}))    # Unknown
+identify(graph, DeleteMechanism("far", outcomes={"Y"}))   # Unknown
 ```
 
 Components come back sorted, with each component's members sorted, so a cost or a refusal
 never varies with dictionary ordering.
+
+The middle case is the one worth dwelling on. Feedback upstream of a knockdown is the
+normal case in biology, and it is answerable: the intervention cuts the edge the loop would
+have travelled. The last two are the limit of that. `graph.cyclic_mechanisms` is a fact
+about the *observational* graph, and for a mechanism on an observational cycle
+`P(out(m) | in(m))` is not its structural kernel however much the intervention severs
+elsewhere — so a cycle a deletion breaks, but whose kernels the answer still needs, is
+still refused. Only the ancestry walk moves to the post-intervention graph; which kernels
+are trustworthy does not.
 
 Both halves are measured. With a two-cycle downstream the estimand still matches the true
 post-deletion law; with the cycle inside the closure the same machinery is **68% wrong**,
@@ -248,8 +267,8 @@ from causal_hypergraphs import plan_elimination
 
 plan = plan_elimination(q.expression, {name: (0, 1) for name in genes})
 plan.summary()
-# 'eliminate 60 variable(s) at induced width 1; largest table 4 entries,
-#  against 1152921504606846976 assignments for enumeration'
+# 'eliminate 59 variable(s) at induced width 1; largest table 4 entries,
+#  against 576460752303423488 assignments for enumeration'
 ```
 
 Measured on a synthetic 20,000-gene sparse GRN (fan-in 3, regulators drawn from a moving
@@ -258,12 +277,18 @@ window), by hop distance from the intervention — this table is produced by
 
 | hops | ancestry | enumeration | largest elimination table |
 |---|---|---|---|
-| 0 | 7 vars | `2**7` | 16 entries |
-| 2 | 25 vars | `2**25` | 16 entries |
-| 5 | 111 vars | `2**111` | 64 entries |
-| 6 | 174 vars | `2**174` | 1,024 entries |
-| 7 | 292 vars | `2**292` | `2**25` entries |
-| 8 | 381 vars | `2**381` | `2**37` entries |
+| 0 | 1 var | `2**1` | 1 entry |
+| 1 | 10 vars | `2**10` | 16 entries |
+| 2 | 19 vars | `2**19` | 16 entries |
+| 3 | 93 vars | `2**93` | 32 entries |
+| 4 | 101 vars | `2**101` | 32 entries |
+| 5 | 106 vars | `2**106` | 64 entries |
+| 6 | 171 vars | `2**171` | 512 entries |
+| 7 | 291 vars | `2**291` | `2**24` entries |
+| 8 | 380 vars | `2**380` | `2**41` entries |
+
+All nine rows are pinned by that test, not just the three the prose leans on. Hop 0 is the
+target's own output, so the estimand is the policy alone -- one variable, one cell.
 
 Both halves matter. Near the intervention the win is total — a hundred-variable ancestry
 for the price of a 64-entry table. Around seven hops the ancestries of different branches
@@ -271,8 +296,8 @@ start to overlap, the width climbs, and the query becomes unaffordable again. Th
 real, and `eliminate` refuses by name rather than trying:
 
 ```text
-IntractableQuery: Elimination needs a table of 33554432 entries (25 variable(s),
-induced width 24), above the 1048576-entry bound. The variables [...] meet at one
+IntractableQuery: Elimination needs a table of 16777216 entries (24 variable(s),
+induced width 23), above the 1048576-entry bound. The variables [...] meet at one
 elimination step, so widening the bound helps only if the width is nearly affordable;
 otherwise ask about a narrower outcome, or measure a variable that splits the bucket.
 ```
@@ -532,7 +557,7 @@ theorem, its assumptions, and its derivation attached.
   does not integrate away (`Σ P(x|y)P(y|x)` runs over `[1, 2]`). Taking it needs the
   reduction rebuilt on the post-*intervention* law.
 - Queries wider than their treewidth. Elimination moved the frontier a long way — a
-  111-variable ancestry costs a 64-entry table — but around seven hops into a sparse GRN
+  106-variable ancestry costs a 64-entry table — but around seven hops into a sparse GRN
   the branches' ancestries overlap, the induced width passes 20, and the query is
   unaffordable again. `eliminate` refuses by name rather than attempting it. Getting past
   that needs approximation (loopy propagation, sampling) or conditioning, which would
@@ -545,7 +570,7 @@ theorem, its assumptions, and its derivation attached.
 
 ## Status and known gaps
 
-The suite is `306 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+The suite is `310 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
 
 Correctness is established by a randomized differential harness (`tests/conformance/`)
 rather than by comparing rendered strings. It generates models satisfying C1–C4 with
