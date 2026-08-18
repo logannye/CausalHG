@@ -677,7 +677,11 @@ def identify_delete_via_t7(
         # expression while dropping its aliases would hand the caller a formula naming
         # something nothing can resolve -- the same defect the aliases exist to fix.
         aliases=pearl_result.aliases,
-        assumptions=T7_ASSUMPTIONS + pearl_result.assumptions,
+        # Core first, and for the same reason `Estimate.summary()` leads with them:
+        # C1/C2/C4 are conditions on the model, not on which branch was taken, and the
+        # branch that returns a formula is the one whose ledger gets turned into a
+        # number. Every T7 refusal records them; an answer may not record less.
+        assumptions=CORE_T7_ASSUMPTIONS + T7_ASSUMPTIONS + pearl_result.assumptions,
         derivation=(
             ProofStep("Boundary check", f"Hidden boundary variables: {list(missing_boundary)}."),
             ProofStep(

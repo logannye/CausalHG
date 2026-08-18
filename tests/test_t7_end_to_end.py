@@ -67,3 +67,29 @@ def test_t7_requires_explicit_outcomes_for_boundary_violating_deletion() -> None
     assert isinstance(result, Unknown)
     assert result.reason == "T7 deletion queries require an explicit observed outcome set."
     assert result.next_algorithm == "Call DeleteMechanism(target, outcomes={...})."
+
+
+def test_the_t7_answer_carries_the_core_assumptions_its_refusals_carry() -> None:
+    """C1, C2 and C4 are conditions on the model, not on which branch the compiler took.
+
+    All four boundary-violating refusals record `CORE_T7_ASSUMPTIONS`. The single branch
+    that returns a formula recorded only the reduction's own assumptions plus the Pearl
+    backend's, so the one result a caller can turn into a number was the one whose ledger
+    omitted C2 -- the assumption `Estimate.summary()` is explicitly ordered to lead with
+    because it is the likeliest to be false.
+    """
+    graph = frontdoor_hidden_boundary_graph()
+
+    answer = identify(graph, DeleteMechanism("m_x", outcomes={"Y"}), allow_t7=True)
+    assert isinstance(answer, Identified)
+    answered = {assumption.code for assumption in answer.assumptions}
+
+    refusal = identify(graph, DeleteMechanism("m_x", outcomes={"Y"}))
+    assert isinstance(refusal, Unknown)
+    refused = {assumption.code for assumption in refusal.assumptions}
+
+    assert {"C1", "C2", "C4"} <= answered
+    # The reduction's own assumptions must survive alongside them.
+    assert "T7 reduction" in answered
+    # Whatever the model-level ledger is, an answer may not carry less of it than a refusal.
+    assert refused & {"C1", "C2", "C4"} <= answered
