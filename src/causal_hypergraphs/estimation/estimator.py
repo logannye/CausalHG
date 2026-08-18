@@ -184,8 +184,12 @@ class _AuditingModel:
     conditioning stratum.
     """
 
-    def __init__(self, inner: DiscreteModel) -> None:
+    def __init__(self, inner: DiscreteModel, expectations: Dataset) -> None:
         self._inner = inner
+        # Conditional expectations are group means over rows, not functions of the
+        # discretized joint, so they are served by the dataset itself. That is what keeps
+        # a continuous readout out of `domains` entirely.
+        self._expectations = expectations
         self.strata: set[tuple[tuple[str, ...], Point]] = set()
 
     @property
@@ -208,6 +212,13 @@ class _AuditingModel:
         self, mechanism: str, variables: Sequence[str], assignment: Assignment
     ) -> float:
         return self._inner.fallback(mechanism, variables, assignment)
+
+    def conditional_expectation(
+        self, target: str, given: Sequence[str], assignment: Assignment
+    ) -> float:
+        if given:
+            self._record(given, assignment)
+        return self._expectations.conditional_expectation(target, given, assignment)
 
     def replacement(
         self,
@@ -354,7 +365,7 @@ def estimate(
     except (DatasetError, SemanticsError) as error:  # pragma: no cover - defensive
         raise UnsupportedEstimand(str(error)) from error
 
-    model = _AuditingModel(inner)
+    model = _AuditingModel(inner, data)
     values, failures = _evaluate_over_scope(identified, model, variables)
     min_count, thinnest = _thinnest_stratum(data, model.strata)
 
@@ -441,7 +452,8 @@ def _bootstrap_interval(
 
     for _ in range(replicates):
         replicate = data.resample(rng)
-        model = replicate.model(footprint, fallbacks=fallbacks, replacements=replacements)
+        inner = replicate.model(footprint, fallbacks=fallbacks, replacements=replacements)
+        model = _AuditingModel(inner, replicate)
         for point in points:
             assignment = dict(zip(variables, point, strict=True))
             try:

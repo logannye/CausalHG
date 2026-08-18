@@ -1,4 +1,5 @@
 from .ast import (
+    ConditionalExpectation,
     Expression,
     Fallback,
     Kernel,
@@ -11,6 +12,7 @@ from .ast import (
 )
 
 __all__ = [
+    "ConditionalExpectation",
     "Expression",
     "Fallback",
     "Kernel",

@@ -2,6 +2,7 @@
 
 from .estimation import Dataset, Estimate, estimate
 from .expression import (
+    ConditionalExpectation,
     Expression,
     Fallback,
     Kernel,
@@ -37,6 +38,7 @@ from .identification import (
     identify,
     identify_delete_via_t7,
     identify_effect,
+    identify_expectation,
     identify_via_t7,
     latent_project,
     latent_project_to_variable_admg,
@@ -56,6 +58,7 @@ __all__ = [
     "Assumption",
     "BipartiteADMG",
     "BipartiteDAG",
+    "ConditionalExpectation",
     "Dataset",
     "DeleteMechanism",
     "DeterminationRule",
@@ -93,6 +96,7 @@ __all__ = [
     "identify",
     "identify_delete_via_t7",
     "identify_effect",
+    "identify_expectation",
     "identify_via_t7",
     "latent_project",
     "latent_project_to_variable_admg",

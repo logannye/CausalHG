@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from causal_hypergraphs.expression import (
+    ConditionalExpectation,
     Expression,
     Fallback,
     Probability,
@@ -178,6 +179,178 @@ def _restrict_to_ancestry(
         f"{len(summed)} variable(s) remain to marginalize.",
     )
     return reduced, step
+
+
+def _contains_quotient(expression: Expression) -> bool:
+    """Whether any node in the tree is a division.
+
+    The factored identifiers are products of per-mechanism factors; the hidden-variable
+    ones are quotients. Only the former can have one factor rewritten as an expectation,
+    so this is the precise test -- narrower than "is the root a Product", which would also
+    reject the `P(outcomes)` collapse that an unreachable intervention produces.
+    """
+    if isinstance(expression, Quotient):
+        return True
+    if isinstance(expression, Product):
+        return any(_contains_quotient(factor) for factor in expression.factors)
+    if isinstance(expression, SumOut):
+        return _contains_quotient(expression.expression)
+    return False
+
+
+def _contains_intervention(expression: Expression) -> bool:
+    """Whether the estimand still carries the factor the intervention installs.
+
+    Its absence means the target mechanism cannot reach the outcome, which the ancestral
+    reduction turns into a collapsed observational expression. Callers that rebuild from
+    the body must branch on this rather than assume a factorized product is there.
+    """
+    if isinstance(expression, Fallback | ReplacementFactor):
+        return True
+    if isinstance(expression, Product):
+        return any(_contains_intervention(factor) for factor in expression.factors)
+    if isinstance(expression, SumOut):
+        return _contains_intervention(expression.expression)
+    if isinstance(expression, Quotient):
+        return _contains_intervention(expression.numerator) or _contains_intervention(
+            expression.denominator
+        )
+    return False
+
+
+def identify_expectation(
+    graph: MechanismGraph,
+    query: DeleteMechanism | ReplaceMechanism,
+    outcome: str,
+    observed_variables: object | None = None,
+) -> IdentificationResult:
+    """Identify `E[outcome | do]` as a functional, without enumerating the outcome.
+
+    The density form indexes its answer by the outcome's value, so the outcome must be a
+    finite discrete variable. An expectation does not: in the truncated factorization the
+    outcome appears in exactly one factor -- the one for its producing mechanism -- so
+
+        E[Y | do] = sum over the ancestry of  (other factors) * E[Y | in(m_Y)]
+
+    and `Y` enters only through a conditional mean. That is a regression, defined for a
+    real-valued readout, and the outcome's domain is never touched.
+
+    The co-outputs of `Y`'s mechanism drop out too. Not by assumption: a co-output that
+    were an ancestor of `Y` would make `Y`'s own mechanism its own ancestor, which C1
+    forbids. So no retained factor mentions one, and the joint factor marginalizes to
+    `E[Y | in(m_Y)]` exactly.
+
+    Refuses when `outcome` is produced by the target mechanism. Its post-intervention law
+    is then the policy the caller supplied, so there would be nothing to estimate, and
+    returning a number would misrepresent where it came from.
+    """
+    _validate_outcomes(graph, (outcome,))
+    target = graph.get_mechanism(query.target)
+    if outcome in target.outputs:
+        raise ValueError(
+            f"{outcome!r} is an output of the mechanism being intervened on, so its "
+            f"post-intervention law is exactly the policy supplied for {query.target!r}. "
+            "There is nothing to estimate from data; take the expectation of that policy "
+            "directly, or ask about a downstream variable."
+        )
+
+    density = identify(graph, _with_outcomes(query, (outcome,)), observed_variables)
+    if not isinstance(density, Identified):
+        return density
+    if _contains_quotient(density.expression):
+        # A quotient does not decompose into per-mechanism factors, so there is no single
+        # factor holding the outcome to fold into an expectation. This is exactly the
+        # hidden-boundary case; the density form still answers it.
+        raise ValueError(
+            f"E[{outcome} | do] needs the factored identifier, and hidden variables forced "
+            "the quotient form for this query, which has no per-mechanism factor to fold "
+            "the outcome into. Use the density form instead."
+        )
+
+    if not _contains_intervention(density.expression):
+        # The density form already collapsed to P(outcome): the target cannot reach it, so
+        # the post-intervention expectation is the observational one. Rebuilding a weighted
+        # sum from that collapsed body would silently drop the weights -- the sum over the
+        # ancestry would still be there while the exogenous marginals that weight it were
+        # not -- and produce an unweighted average of conditional means.
+        return Identified(
+            expression=ConditionalExpectation(outcome),
+            theorem=density.theorem,
+            assumptions=density.assumptions,
+            derivation=density.derivation
+            + (
+                ProofStep(
+                    "Take expectation",
+                    f"The intervention cannot reach {outcome!r}, so its post-intervention "
+                    f"law is the observational one and E[{outcome} | do] = E[{outcome}].",
+                ),
+            ),
+        )
+
+    producer = {
+        variable: name
+        for name in graph.mechanisms
+        for variable in graph.get_mechanism(name).outputs
+    }
+    outcome_mechanism = producer.get(outcome)
+    if outcome_mechanism is None:
+        absorbed: tuple[str, ...] = (outcome,)
+        expectation = ConditionalExpectation(outcome)
+    else:
+        produced_by = graph.get_mechanism(outcome_mechanism)
+        absorbed = produced_by.outputs
+        expectation = ConditionalExpectation(outcome, given=produced_by.inputs)
+
+    needed = ancestral_closure(graph, (outcome,))
+    body_expression = (
+        density.expression.expression
+        if isinstance(density.expression, SumOut)
+        else density.expression
+    )
+    product = (
+        body_expression
+        if isinstance(body_expression, Product)
+        else Product([body_expression])
+    )
+    retained = [
+        factor
+        for factor in product.factors
+        if factor.footprint() <= (needed - set(absorbed))
+    ]
+    # Everything in the ancestry except the outcome's own output group. The variables the
+    # expectation conditions on are summed here too: they are free *inside* the node and
+    # bound by this sum, which is what makes the result a scalar.
+    summed = tuple(sorted(needed - set(absorbed)))
+    body: Expression = Product([*retained, expectation])
+    if summed:
+        body = SumOut(summed, body)
+
+    return Identified(
+        expression=body,
+        theorem=density.theorem,
+        assumptions=density.assumptions,
+        derivation=density.derivation
+        + (
+            ProofStep(
+                "Take expectation",
+                f"{outcome!r} appears in exactly one chain-rule factor, so summing it "
+                f"against that factor gives {expectation}. Its co-outputs "
+                f"{sorted(set(absorbed) - {outcome})} cannot be its ancestors under C1, so "
+                "they appear in no retained factor and marginalize away. The outcome's "
+                "domain is never enumerated, so it may be continuous.",
+            ),
+        ),
+    )
+
+
+def _with_outcomes(
+    query: DeleteMechanism | ReplaceMechanism, outcomes: tuple[str, ...]
+) -> DeleteMechanism | ReplaceMechanism:
+    if isinstance(query, DeleteMechanism):
+        return DeleteMechanism(query.target, outcomes)
+    return ReplaceMechanism(
+        query.target, query.incidence or query.replacement, outcomes
+    )
 
 
 def _marginalize_quotient(

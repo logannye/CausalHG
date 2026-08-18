@@ -24,6 +24,7 @@ from functools import singledispatch
 from typing import Any, Protocol, runtime_checkable
 
 from causal_hypergraphs.expression import (
+    ConditionalExpectation,
     Expression,
     Fallback,
     MechanismFactor,
@@ -90,6 +91,10 @@ class Model(Protocol):
 
     def fallback(
         self, mechanism: str, variables: Sequence[str], assignment: Assignment
+    ) -> float: ...
+
+    def conditional_expectation(
+        self, target: str, given: Sequence[str], assignment: Assignment
     ) -> float: ...
 
     def replacement(
@@ -180,6 +185,22 @@ class DiscreteModel:
             )
         return numerator / denominator
 
+    def conditional_expectation(
+        self, target: str, given: Sequence[str], assignment: Assignment
+    ) -> float:
+        """``E[target | given]`` evaluated at ``assignment``.
+
+        Exact, by summing the target's own domain against its conditional law. A model
+        estimating this from rows would take a group mean instead; either way the target
+        is integrated here rather than enumerated by the evaluator.
+        """
+        total = 0.0
+        for value in self.domains[target]:
+            extended = dict(assignment)
+            extended[target] = value
+            total += float(value) * self.conditional((target,), given, extended)
+        return total
+
     def fallback(
         self, mechanism: str, variables: Sequence[str], assignment: Assignment
     ) -> float:
@@ -245,6 +266,11 @@ def evaluate(expression: Expression, model: Model, assignment: Assignment) -> fl
 @evaluate.register
 def _(expression: Probability, model: Model, assignment: Assignment) -> float:
     return model.conditional(expression.variables, expression.given, assignment)
+
+
+@evaluate.register
+def _(expression: ConditionalExpectation, model: Model, assignment: Assignment) -> float:
+    return model.conditional_expectation(expression.target, expression.given, assignment)
 
 
 @evaluate.register

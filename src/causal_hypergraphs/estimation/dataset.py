@@ -6,19 +6,25 @@ come from donors, wells from plates, reads from libraries -- and resampling rows
 independent unit is the donor produces an interval that is too narrow, often by a lot.
 That parameter is therefore part of the type, and the estimate reports which unit it used.
 
-Scope: finite discrete variables. Continuous readouts must be binned before they get here,
-and binning is a modelling choice that can create or destroy the very positivity the
-estimator checks, so it is deliberately not done implicitly.
+Two kinds of column. **Variables** are finite-valued and form the sample space the
+estimator enumerates. **Measures** are numeric and are never discretized: they can only be
+reached through a conditional expectation, which integrates them inside the node rather
+than enumerating them. That is how a continuous readout -- an expression level, a growth
+rate -- is handled without binning, and binning is not a neutral preprocessing step: it
+can create or destroy the very data support the estimator checks.
+
+A variable that is genuinely continuous and appears as a *conditioning* variable still has
+to be binned by the caller, deliberately and visibly.
 """
 from __future__ import annotations
 
 import itertools
 import random
 from collections.abc import Hashable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from causal_hypergraphs.semantics import DiscreteModel
+from causal_hypergraphs.semantics import DiscreteModel, UndefinedEstimand
 
 Point = tuple[Any, ...]
 
@@ -52,6 +58,17 @@ class Dataset:
     rows: tuple[Point, ...]
     units: tuple[Hashable, ...]
     unit_column: str | None = None
+    measures: tuple[str, ...] = ()
+    """Numeric columns kept as real values, never discretized.
+
+    A measure can be the target of `E[Y | ...]` but never a coordinate of the sample
+    space: the estimator integrates it inside the expectation instead of enumerating it.
+    That is what lets a readout be an expression level or a growth rate without binning,
+    and binning is not neutral -- it can create or destroy the data support the estimator
+    checks.
+    """
+    measurements: Mapping[str, tuple[float, ...]] = field(default_factory=dict)
+    """Each measure's values, positionally aligned with `rows`."""
 
     @classmethod
     def from_records(
@@ -60,6 +77,7 @@ class Dataset:
         *,
         domains: Mapping[str, Sequence[Any]] | None = None,
         unit: str | None = None,
+        measures: Sequence[str] = (),
     ) -> Dataset:
         """Build a dataset from row dicts.
 
@@ -67,6 +85,10 @@ class Dataset:
         library. Rows sharing a value are resampled together when bootstrapping. Omit it
         only when rows really are independent; the default treats each row as its own
         unit, which is the assumption that yields the narrowest interval.
+
+        `measures` names numeric columns to keep as real values rather than discretize.
+        They are excluded from `variables` and `domains`, and can only be reached through
+        a conditional expectation.
         """
         materialized = [dict(record) for record in records]
         if not materialized:
@@ -75,8 +97,15 @@ class Dataset:
         columns = set(materialized[0])
         if unit is not None and unit not in columns:
             raise DatasetError(f"Unit column {unit!r} is not present in the records.")
-        names = tuple(sorted(columns - ({unit} if unit is not None else set())))
-        if not names:
+        measure_names = tuple(sorted(measures))
+        absent = [name for name in measure_names if name not in columns]
+        if absent:
+            raise DatasetError(f"Measure column(s) {absent} are not present in the records.")
+        if unit is not None and unit in measure_names:
+            raise DatasetError(f"{unit!r} cannot be both the unit column and a measure.")
+        reserved = set(measure_names) | ({unit} if unit is not None else set())
+        names = tuple(sorted(columns - reserved))
+        if not names and not measure_names:
             raise DatasetError("Records contain no modelled variables.")
 
         for position, record in enumerate(materialized):
@@ -110,8 +139,18 @@ class Dataset:
             if unit is not None
             else tuple(range(len(materialized)))
         )
+        measurements = {
+            name: tuple(float(record[name]) for record in materialized)
+            for name in measure_names
+        }
         return cls(
-            variables=names, domains=resolved, rows=rows, units=units, unit_column=unit
+            variables=names,
+            domains=resolved,
+            rows=rows,
+            units=units,
+            unit_column=unit,
+            measures=measure_names,
+            measurements=measurements,
         )
 
     @classmethod
@@ -233,6 +272,44 @@ class Dataset:
             replacements=dict(replacements or {}),
         )
 
+    def conditional_expectation(
+        self, target: str, given: Sequence[str], assignment: Mapping[str, Any]
+    ) -> float:
+        """``E[target | given]`` as the mean of `target` over the matching rows.
+
+        This is where a continuous readout is actually handled: a group mean needs no
+        domain for `target`, so nothing is binned. An empty cell raises rather than
+        averaging over nothing, which routes it into the same certificate discharge as an
+        empty conditioning cell in the density form -- a named stratum, not a `nan`.
+        """
+        if target not in self.measurements:
+            raise DatasetError(
+                f"{target!r} is not a measure column of this dataset. Declare it with "
+                f"`measures=({target!r},)` so it is kept as a number rather than "
+                "discretized. Measures present: "
+                f"{list(self.measures)}."
+            )
+        values = self.measurements[target]
+        if not given:
+            return sum(values) / len(values)
+
+        positions = self._positions(tuple(given))
+        wanted = tuple(assignment[name] for name in given)
+        total = 0.0
+        count = 0
+        for row, value in zip(self.rows, values, strict=True):
+            if all(row[p] == v for p, v in zip(positions, wanted, strict=True)):
+                total += value
+                count += 1
+        if count == 0:
+            raise UndefinedEstimand(
+                f"E[{target} | {','.join(given)}] is undefined: no rows at "
+                f"{dict(zip(given, wanted, strict=True))!r}.",
+                kernel=f"E[{target} | {','.join(given)}]",
+                stratum=dict(zip(given, wanted, strict=True)),
+            )
+        return total / count
+
     # -- resampling ------------------------------------------------------------
 
     def resample(self, rng: random.Random) -> Dataset:
@@ -243,24 +320,29 @@ class Dataset:
         declared domains, so a level that vanishes under resampling still exists as a
         zero cell rather than silently leaving the model.
         """
-        grouped: dict[Hashable, list[Point]] = {}
-        for row, unit in zip(self.rows, self.units, strict=True):
-            grouped.setdefault(unit, []).append(row)
+        grouped: dict[Hashable, list[int]] = {}
+        for position, unit in enumerate(self.units):
+            grouped.setdefault(unit, []).append(position)
 
         labels = list(grouped)
         drawn = [labels[rng.randrange(len(labels))] for _ in labels]
-        rows: list[Point] = []
+        indices: list[int] = []
         units: list[Hashable] = []
         for replicate, label in enumerate(drawn):
-            for row in grouped[label]:
-                rows.append(row)
+            for position in grouped[label]:
+                indices.append(position)
                 units.append(replicate)
         return Dataset(
             variables=self.variables,
             domains=self.domains,
-            rows=tuple(rows),
+            rows=tuple(self.rows[i] for i in indices),
             units=tuple(units),
             unit_column=self.unit_column,
+            measures=self.measures,
+            measurements={
+                name: tuple(values[i] for i in indices)
+                for name, values in self.measurements.items()
+            },
         )
 
     # -- internals -------------------------------------------------------------

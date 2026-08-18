@@ -205,7 +205,7 @@ def test_no_outcomes_still_returns_the_full_joint() -> None:
     graph = _chain(4)
     result = _identified(graph, DeleteMechanism("m0"))
 
-    assert result.expression.scope() == frozenset(graph.variables)
+    assert result.expression.scope() == graph.variable_set
 
 
 def test_an_outcome_outside_the_graph_is_rejected() -> None:

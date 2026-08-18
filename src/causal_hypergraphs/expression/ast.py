@@ -146,6 +146,52 @@ class Fallback(Expression):
 
 
 @dataclass(frozen=True)
+class ConditionalExpectation(Expression):
+    """`E[target | given]` -- the outcome integrated out at compile time.
+
+    This is what lets a readout be continuous. Every other node treats its variables as
+    coordinates of a finite sample space that evaluation enumerates; this one does not,
+    because `target` is summed (or integrated) *inside* the node rather than by the
+    evaluator. So `target` is neither free nor bound: it is absent from both `scope()` and
+    `footprint()`, and its domain is never touched.
+
+    That makes it estimable as a regression -- a group mean of `target` over the rows
+    matching `given` -- which is defined for real-valued outcomes with no binning. Binning
+    is not a neutral preprocessing step: it can create or destroy the data support the
+    estimator checks, so avoiding the need for it is the point rather than a convenience.
+    """
+
+    target: str
+    given: tuple[str, ...] = ()
+
+    def __init__(self, target: str, given: object = ()) -> None:
+        object.__setattr__(self, "target", str(target))
+        object.__setattr__(self, "given", _items(given))
+
+    def __str__(self) -> str:
+        if self.given:
+            return f"E[{self.target} | {_join(self.given)}]"
+        return f"E[{self.target}]"
+
+    def to_latex(self) -> str:
+        if self.given:
+            return rf"\mathbb{{E}}[{self.target} \mid {_join(self.given)}]"
+        return rf"\mathbb{{E}}[{self.target}]"
+
+    def scope(self) -> frozenset[str]:
+        return frozenset(self.given)
+
+    def conditioned_on(self) -> frozenset[str]:
+        return frozenset(self.given)
+
+    def kernels(self) -> tuple[Kernel, ...]:
+        return (Kernel("expectation", "E", (self.target,), self.given),)
+
+    def canonical_key(self) -> tuple[Any, ...]:
+        return ("expectation", self.target, self.given)
+
+
+@dataclass(frozen=True)
 class MechanismFactor(Expression):
     mechanism: str
     variables: tuple[str, ...]
