@@ -233,10 +233,29 @@ theorem, its assumptions, and its derivation attached.
 
 ## Status and known gaps
 
-The suite is `109 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
-Estimands are checked by evaluating them against interventional ground truth, and the
-oracle is itself tested against deliberately wrong estimands so that it can be shown
-to fail.
+The suite is `125 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+
+Correctness is established by a randomized differential harness (`tests/conformance/`)
+rather than by comparing rendered strings. It generates models satisfying C1–C4 with
+strictly positive, structurally sparse, and singular ("all outputs equal") kernels,
+computes exact interventional laws the compiler never sees, and checks the compiler
+against them. On the current sweep:
+
+- **Identifiers.** 750 identified queries across all five theorem branches
+  (`T2`/`T3`/`T4`/`T4.1`/`T6`); 716 verified pointwise against the exact interventional
+  law, and 34 skipped because a positivity assumption the result *itself records* fails
+  in that model. An estimand that cannot be evaluated while recording no such
+  assumption is a failure, not a skip.
+- **`d*`-separation.** 5,400 (X, Y, Z) triples, **zero unsound verdicts** — every
+  claimed separation is an actual conditional independence in the model's own law. On
+  models with strictly positive kernels, where faithfulness is generic, there were also
+  zero *missed* independences over 5,400 triples, so the criterion is complete where its
+  hypothesis holds.
+
+The harness is itself tested against deliberately wrong estimands, an oracle that
+separates everything, and a faithful reconstruction of the historical partial-determination
+bug — which it catches 63 times. Results are byte-identical across `PYTHONHASHSEED`
+values.
 
 Two gaps are worth naming up front:
 
@@ -246,8 +265,8 @@ Two gaps are worth naming up front:
   `{C}` when `C = D` are siblings produced by one mechanism, which is the case the
   augmentation exists for — §5.1 of the same document describes the sibling reasoning
   the proof does not perform. The implementation is unaffected, since it uses declared
-  equality rules; the theorem may well hold; the proof as written does not establish
-  it. `T1`'s soundness has not been differential-tested the way `T2` has.
+  equality rules, and the sweep above is empirical evidence that `T1` holds as stated;
+  but the proof as written does not establish it, and repairing it is outstanding.
 - **`d*`-separation is not wired into identification.** The oracle exists and is
   sound, but nothing in `identification/` consults it.
 
@@ -284,4 +303,5 @@ src/causal_hypergraphs/
 
 minimal_model/      NumPy reference implementation
 tests/              compiler, semantics, and separation tests
+tests/conformance/  model generator and exact-ground-truth checkers
 ```
