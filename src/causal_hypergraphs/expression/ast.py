@@ -48,7 +48,19 @@ class Expression:
         return str(self)
 
     def scope(self) -> frozenset[str]:
+        """The *free* variables: those an assignment must bind to evaluate this."""
         return frozenset()
+
+    def footprint(self) -> frozenset[str]:
+        """Every variable evaluating this ranges over, bound ones included.
+
+        `scope()` says what a caller must supply; `footprint()` says what evaluation
+        costs. They differ exactly at `SumOut`, which binds variables by enumerating
+        their domains -- so the footprint, not the scope, is the exponent in the cost of
+        a finite-discrete evaluation. A marginal query is worth computing precisely
+        because it shrinks this set.
+        """
+        return self.scope()
 
     def conditioned_on(self) -> frozenset[str]:
         return frozenset()
@@ -134,6 +146,52 @@ class Fallback(Expression):
 
 
 @dataclass(frozen=True)
+class ConditionalExpectation(Expression):
+    """`E[target | given]` -- the outcome integrated out at compile time.
+
+    This is what lets a readout be continuous. Every other node treats its variables as
+    coordinates of a finite sample space that evaluation enumerates; this one does not,
+    because `target` is summed (or integrated) *inside* the node rather than by the
+    evaluator. So `target` is neither free nor bound: it is absent from both `scope()` and
+    `footprint()`, and its domain is never touched.
+
+    That makes it estimable as a regression -- a group mean of `target` over the rows
+    matching `given` -- which is defined for real-valued outcomes with no binning. Binning
+    is not a neutral preprocessing step: it can create or destroy the data support the
+    estimator checks, so avoiding the need for it is the point rather than a convenience.
+    """
+
+    target: str
+    given: tuple[str, ...] = ()
+
+    def __init__(self, target: str, given: object = ()) -> None:
+        object.__setattr__(self, "target", str(target))
+        object.__setattr__(self, "given", _items(given))
+
+    def __str__(self) -> str:
+        if self.given:
+            return f"E[{self.target} | {_join(self.given)}]"
+        return f"E[{self.target}]"
+
+    def to_latex(self) -> str:
+        if self.given:
+            return rf"\mathbb{{E}}[{self.target} \mid {_join(self.given)}]"
+        return rf"\mathbb{{E}}[{self.target}]"
+
+    def scope(self) -> frozenset[str]:
+        return frozenset(self.given)
+
+    def conditioned_on(self) -> frozenset[str]:
+        return frozenset(self.given)
+
+    def kernels(self) -> tuple[Kernel, ...]:
+        return (Kernel("expectation", "E", (self.target,), self.given),)
+
+    def canonical_key(self) -> tuple[Any, ...]:
+        return ("expectation", self.target, self.given)
+
+
+@dataclass(frozen=True)
 class MechanismFactor(Expression):
     mechanism: str
     variables: tuple[str, ...]
@@ -188,6 +246,9 @@ class Quotient(Expression):
     def scope(self) -> frozenset[str]:
         return self.numerator.scope() | self.denominator.scope()
 
+    def footprint(self) -> frozenset[str]:
+        return self.numerator.footprint() | self.denominator.footprint()
+
     def conditioned_on(self) -> frozenset[str]:
         return self.numerator.conditioned_on() | self.denominator.conditioned_on()
 
@@ -227,6 +288,12 @@ class Product(Expression):
             scope.update(factor.scope())
         return frozenset(scope)
 
+    def footprint(self) -> frozenset[str]:
+        touched: set[str] = set()
+        for factor in self.factors:
+            touched.update(factor.footprint())
+        return frozenset(touched)
+
     def conditioned_on(self) -> frozenset[str]:
         conditioned: set[str] = set()
         for factor in self.factors:
@@ -264,6 +331,11 @@ class SumOut(Expression):
 
     def scope(self) -> frozenset[str]:
         return self.expression.scope() - frozenset(self.variables)
+
+    def footprint(self) -> frozenset[str]:
+        # The summed variables are bound, not free -- but evaluation still enumerates
+        # every one of their domains, so they are part of the cost.
+        return self.expression.footprint() | frozenset(self.variables)
 
     def conditioned_on(self) -> frozenset[str]:
         return self.expression.conditioned_on() - frozenset(self.variables)

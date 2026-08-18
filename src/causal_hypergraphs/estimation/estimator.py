@@ -184,8 +184,12 @@ class _AuditingModel:
     conditioning stratum.
     """
 
-    def __init__(self, inner: DiscreteModel) -> None:
+    def __init__(self, inner: DiscreteModel, expectations: Dataset) -> None:
         self._inner = inner
+        # Conditional expectations are group means over rows, not functions of the
+        # discretized joint, so they are served by the dataset itself. That is what keeps
+        # a continuous readout out of `domains` entirely.
+        self._expectations = expectations
         self.strata: set[tuple[tuple[str, ...], Point]] = set()
 
     @property
@@ -208,6 +212,13 @@ class _AuditingModel:
         self, mechanism: str, variables: Sequence[str], assignment: Assignment
     ) -> float:
         return self._inner.fallback(mechanism, variables, assignment)
+
+    def conditional_expectation(
+        self, target: str, given: Sequence[str], assignment: Assignment
+    ) -> float:
+        if given:
+            self._record(given, assignment)
+        return self._expectations.conditional_expectation(target, given, assignment)
 
     def replacement(
         self,
@@ -335,9 +346,14 @@ def estimate(
     described in `support.failures`.
     """
     identified = _as_identified(result)
+    # Two different sets, and conflating them is a bug the marginal-query work exposed.
+    # `scope` is what the answer is indexed by -- the points that come back in `values`.
+    # `footprint` additionally covers variables the estimand *sums over*, which the model
+    # must still supply domains for even though no caller ever binds them.
     variables = tuple(sorted(identified.expression.scope()))
+    footprint = tuple(sorted(identified.expression.footprint()))
 
-    missing = [name for name in variables if name not in data.variables]
+    missing = [name for name in footprint if name not in data.variables]
     if missing:
         raise UnsupportedEstimand(
             f"The estimand references {missing}, which the dataset does not contain. "
@@ -345,11 +361,11 @@ def estimate(
         )
 
     try:
-        inner = data.model(variables, fallbacks=fallbacks, replacements=replacements)
+        inner = data.model(footprint, fallbacks=fallbacks, replacements=replacements)
     except (DatasetError, SemanticsError) as error:  # pragma: no cover - defensive
         raise UnsupportedEstimand(str(error)) from error
 
-    model = _AuditingModel(inner)
+    model = _AuditingModel(inner, data)
     values, failures = _evaluate_over_scope(identified, model, variables)
     min_count, thinnest = _thinnest_stratum(data, model.strata)
 
@@ -384,6 +400,7 @@ def estimate(
             identified,
             data,
             variables,
+            footprint,
             fallbacks=fallbacks,
             replacements=replacements,
             replicates=bootstrap,
@@ -412,6 +429,7 @@ def _bootstrap_interval(
     identified: Identified,
     data: Dataset,
     variables: tuple[str, ...],
+    footprint: tuple[str, ...],
     *,
     fallbacks: Mapping[str, Mapping[Point, float]] | None,
     replacements: Mapping[str, Mapping[tuple[Point, Point], float]] | None,
@@ -434,7 +452,8 @@ def _bootstrap_interval(
 
     for _ in range(replicates):
         replicate = data.resample(rng)
-        model = replicate.model(variables, fallbacks=fallbacks, replacements=replacements)
+        inner = replicate.model(footprint, fallbacks=fallbacks, replacements=replacements)
+        model = _AuditingModel(inner, replicate)
         for point in points:
             assignment = dict(zip(variables, point, strict=True))
             try:

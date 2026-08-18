@@ -131,6 +131,93 @@ value = evaluate(result.expression, model, {"A": 0, "B": 1, "C": 0, "D": 0, "E":
 Evaluation is total or loud: an undefined quantity raises `UndefinedEstimand` rather
 than quietly becoming `nan`.
 
+### Asking about a few readouts
+
+A full-joint query enumerates every variable's domain. Passing `outcomes` reduces the
+estimand to the outcome's **ancestral closure** — every factor outside it is a conditional
+summing to one, so it is dropped rather than summed:
+
+```python
+identify(graph, DeleteMechanism("m1", outcomes={"F"}))
+```
+
+The reduction is exact, and `expression.footprint()` reports what evaluation now costs
+(`scope()` says what a caller must supply; they differ at `SumOut`). On a 20,000-gene
+sparse GRN, the cost of `P(readout | delete(m))` by hop distance from the intervention:
+
+| at the target | 1 hop | 2 hops | deepest descendant | full joint |
+|---|---|---|---|---|
+| `2**4` | `2**21` | `2**56` | `2**468` | `2**20000` |
+
+So this makes the *neighbourhood* of an intervention computable — the common query — and
+leaves deep ancestries out of reach. Those need variable elimination, whose cost is
+exponential in treewidth rather than in ancestry size; that is not implemented.
+
+When the target mechanism falls outside the closure, the estimand collapses to
+`P(outcomes)`. That is stronger than a numerical coincidence: the expression mentions
+neither the mechanism nor its policy, so the answer *cannot* depend on what the
+intervention installs.
+
+### Continuous readouts: `E[Y | do]`
+
+A biological readout is a number, not a category, and binning it is not neutral — it can
+create or destroy the data support the estimator checks. `identify_expectation` avoids the
+need. The outcome appears in exactly one chain-rule factor, so it can be folded into a
+conditional mean and never enumerated:
+
+```python
+q = identify_expectation(graph, DeleteMechanism("reg"), "target")
+str(q.expression)
+# 'sum_{TF,genotype,stim} E[target | TF] * P(genotype) * P(stim) * P0_reg(TF)'
+q.expression.footprint()      # {'TF', 'genotype', 'stim'} -- 'target' is absent
+
+data = Dataset.from_records(rows, unit="donor", measures=("target",))
+estimate(q, data, fallbacks={"reg": knockdown}, bootstrap=300)
+# 138.3, 95% CI [136.7, 139.8]   -- 3,000 distinct float values, never binned
+```
+
+`measures=` names numeric columns kept as real values. `E[Y | Z]` is a group mean over
+matching rows, and an empty group raises with its stratum, so it lands in the same
+certificate discharge as an empty conditioning cell.
+
+That the outcome's co-outputs also drop out is a consequence of C1, not an assumption: a
+co-output that were an ancestor of the outcome would make its own mechanism its own
+ancestor. Two cases are refused rather than guessed — an outcome produced by the target
+mechanism (its post-intervention law *is* the policy you supplied), and one whose
+identifier is a quotient (no per-mechanism factor to fold into).
+
+### Which covariates are safe to condition on
+
+The compiler's own estimands need no adjustment set, but analysts stratify, filter, and add
+regression terms anyway — and conditioning on a marker *downstream of the perturbation*
+looks like ordinary covariate control while silently removing part of the effect being
+measured.
+
+```python
+check_covariates(graph, DeleteMechanism("knockdown"), "IFNG",
+                 ["donor", "stim", "exhaustion_marker", "batch"]).summary()
+```
+
+```text
+  Structural -- post-treatment, no distributional assumption involved:
+    !! exhaustion_marker: post-treatment: reachable from 'knockdown' in the graph, so
+       conditioning on it removes part of the effect being measured.
+
+  Warning -- may open a back-door path; rests on faithfulness, so this is not a proof:
+    (none)
+
+  Admissible: ['donor', 'stim', 'batch']
+```
+
+The two findings are kept apart because their evidence differs. **Post-treatment** is a
+structural fact about the graph. **Path opening** is detected on the back-door graph — the
+graph with the target's outgoing edges severed, so any surviving connection is non-causal —
+by `d_separated` going from a separation verdict to a non-verdict; since that oracle is
+sound but complete only under faithfulness, it is a warning rather than a proof of harm.
+
+`admissible` means only that neither failure mode was detected. It is not a certificate
+that adjusting for the covariate yields an unbiased estimate.
+
 ### Estimating from data
 
 `causal_hypergraphs.estimation` runs the same estimand against an actual dataset, and
@@ -259,6 +346,10 @@ theorem, its assumptions, and its derivation attached.
 - Verified replacement incidence when a `Mechanism` is supplied, which discharges the
   `rho(m') = rho(m)` certificate into a derivation step.
 - Finite-discrete semantics for evaluating estimands.
+- Marginal queries: `outcomes` reduces an estimand to its ancestral closure, exactly.
+- Expectation functionals: `E[Y | do]` for a continuous readout, no binning.
+- Covariate admissibility: `check_covariates` separates structural post-treatment
+  findings from faithfulness-dependent path-opening warnings.
 - A data-facing estimator: `Dataset` (+ declared unit of independence), `estimate`,
   positivity discharge against the empirical support, and unit-bootstrap intervals
   measured at 94.3% coverage over 1,568 intervals.
@@ -278,9 +369,14 @@ theorem, its assumptions, and its derivation attached.
 - Complete Pearl-ID beyond the currently implemented backend cases.
 - Cyclic mechanism graphs; Markov-kernel mechanisms; richer role typing
   (substrate / enzyme / product); mechanism-correlated noise.
-- Estimators for continuous or high-dimensional data. `estimate` handles finite
-  discrete variables; continuous readouts must be binned first, and binning is a
-  modelling choice that can create or destroy the positivity being checked.
+- Variable elimination. Marginal queries reduce to the outcome's ancestry, which makes
+  the neighbourhood of an intervention computable but leaves deep ancestries
+  (`2**468` on a 20k-gene GRN) out of reach. Cost exponential in treewidth rather than
+  ancestry size is the missing piece.
+- Continuous *conditioning* variables. Outcomes may be continuous via `E[Y | do]`;
+  anything conditioned on must still be binned by the caller, deliberately.
+- Cyclic mechanism graphs. C1 rejects feedback at construction, which rules out most
+  regulatory networks.
 
 ## Status and known gaps
 

@@ -43,8 +43,14 @@ class ReplaceMechanism:
     target: str
     replacement: str = "m'"
     incidence: Mechanism | None = None
+    outcomes: tuple[str, ...] = ()
 
-    def __init__(self, target: str, replacement: str | Mechanism = "m'") -> None:
+    def __init__(
+        self,
+        target: str,
+        replacement: str | Mechanism = "m'",
+        outcomes: Iterable[object] | str | None = (),
+    ) -> None:
         if isinstance(replacement, Mechanism):
             name, incidence = replacement.name, replacement
         else:
@@ -57,3 +63,4 @@ class ReplaceMechanism:
         object.__setattr__(self, "target", str(target))
         object.__setattr__(self, "replacement", name)
         object.__setattr__(self, "incidence", incidence)
+        object.__setattr__(self, "outcomes", _ordered(outcomes))
