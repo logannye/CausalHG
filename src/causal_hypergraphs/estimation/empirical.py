@@ -109,7 +109,11 @@ class EmpiricalModel:
         return self._data.conditional_expectation(target, given, assignment)
 
     def fallback(
-        self, mechanism: str, variables: Sequence[str], assignment: Assignment
+        self,
+        mechanism: str,
+        variables: Sequence[str],
+        assignment: Assignment,
+        marginalized: Sequence[str] = (),
     ) -> float:
         """``P0^mechanism(variables)``: policy, supplied rather than estimated.
 
@@ -125,6 +129,22 @@ class EmpiricalModel:
         missing = [name for name in variables if name not in assignment]
         if missing:
             raise SemanticsError(f"Assignment does not bind {missing}.")
+        if marginalized:
+            outputs = sorted(tuple(variables) + tuple(marginalized))
+            position = {name: index for index, name in enumerate(outputs)}
+            wanted = [(position[name], assignment[name]) for name in variables]
+            total = 0.0
+            matched = False
+            for key, probability in table.items():
+                if all(key[index] == value for index, value in wanted):
+                    total += probability
+                    matched = True
+            if not matched:
+                raise MissingKernel(
+                    f"Fallback policy P0_{mechanism} has no entry with "
+                    f"{ {name: assignment[name] for name in variables} !r}."
+                )
+            return total
         key = tuple(assignment[name] for name in sorted(variables))
         try:
             return table[key]

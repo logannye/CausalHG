@@ -181,6 +181,72 @@ class MechanismGraph:
         except KeyError as exc:
             raise KeyError(f"No mechanism named {name!r}") from exc
 
+    def consumers(self) -> dict[str, tuple[str, ...]]:
+        """The mechanisms reading each variable, indexed by variable."""
+        index: dict[str, list[str]] = {}
+        for name in self.mechanisms:
+            for variable in self.get_mechanism(name).inputs:
+                index.setdefault(variable, []).append(name)
+        return {variable: tuple(names) for variable, names in index.items()}
+
+    def observed_closure(
+        self, variables: object, observed: frozenset[str] | None = None
+    ) -> frozenset[str]:
+        """Observed variables reached from `variables`, through hidden ones only.
+
+        One step follows a mechanism: from a variable, every mechanism consuming it
+        produces its outputs. An observed variable is a stopping point rather than a node
+        to pass through, which is the "interior nodes are all latent" condition of the
+        standard latent projection -- and the same walk answers "can this hidden variable
+        move anything anyone measured", which is what decides whether it obstructs
+        identification or is simply removable.
+
+        Members of `variables` that are themselves observed are returned. `observed`
+        overrides the graph's own observed set, for callers asking what would be
+        identifiable under a different measurement plan.
+        """
+        observed = self.observed_set if observed is None else observed
+        consumers = self.consumers()
+        reached: set[str] = set()
+        seen: set[str] = set()
+        stack = list(_ordered(variables))
+        while stack:
+            variable = stack.pop()
+            if variable in seen:
+                continue
+            seen.add(variable)
+            if variable in observed:
+                reached.add(variable)
+                continue
+            for name in consumers.get(variable, ()):
+                stack.extend(self.get_mechanism(name).outputs)
+        return frozenset(reached)
+
+    def removable_outputs(
+        self, mechanism_name: str, observed: frozenset[str] | None = None
+    ) -> tuple[str, ...]:
+        """Hidden outputs of `mechanism_name` that no observable depends on.
+
+        These do not obstruct identification. `delete(m)` installs a joint policy over
+        every output, supplied by the caller, so a hidden coordinate that reaches nothing
+        observed is summed out of that declared table -- its domain is part of the
+        intervention rather than something the data must supply.
+
+        A hidden output that *does* reach an observation is the opposite case and is not
+        identifiable at all: relabelling it preserves every observed distribution and
+        changes the policy defined on its values.
+        """
+        resolved = self.observed_set if observed is None else observed
+        mechanism = self.get_mechanism(mechanism_name)
+        hidden = set(mechanism.outputs) - resolved
+        return tuple(
+            sorted(
+                name
+                for name in hidden
+                if not self.observed_closure((name,), resolved)
+            )
+        )
+
     def mechanism_dependencies(self) -> dict[str, set[str]]:
         """`m -> m'` whenever an output of `m` is an input of `m'`.
 

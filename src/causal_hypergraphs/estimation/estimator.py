@@ -241,9 +241,13 @@ class _AuditingModel:
         return self._inner.conditional(variables, given, assignment)
 
     def fallback(
-        self, mechanism: str, variables: Sequence[str], assignment: Assignment
+        self,
+        mechanism: str,
+        variables: Sequence[str],
+        assignment: Assignment,
+        marginalized: Sequence[str] = (),
     ) -> float:
-        return self._inner.fallback(mechanism, variables, assignment)
+        return self._inner.fallback(mechanism, variables, assignment, marginalized)
 
     def conditional_expectation(
         self, target: str, given: Sequence[str], assignment: Assignment
