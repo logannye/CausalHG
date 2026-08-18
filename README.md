@@ -370,6 +370,17 @@ sound but complete only under faithfulness, it is a warning rather than a proof 
 `admissible` means only that neither failure mode was detected. It is not a certificate
 that adjusting for the covariate yields an unbiased estimate.
 
+Both findings are checked against exact ground truth over 120 generated models — 2,596
+verdicts. Post-treatment is structural, so it is verified in *both* directions against a
+reachability walk written independently of the library's. Path-opening is verified in the
+sound direction only: every separation the report relies on must be a real conditional
+independence in the post-deletion law, which is what the back-door graph's law is, and 693
+such claims are checked with an exact division-free test. The warning fires 38 times and
+all 38 land on a genuine dependence — reported rather than gated, since d\*-separation is
+complete only under faithfulness. A sweep reporting *zero* flags would be indistinguishable
+from testing on the full graph, where the causal path keeps the mechanism and the outcome
+connected whatever the covariate does, so the flag count is gated too.
+
 ### Estimating from data
 
 `causal_hypergraphs.estimation` runs the same estimand against an actual dataset, and
@@ -573,7 +584,7 @@ theorem, its assumptions, and its derivation attached.
 
 ## Status and known gaps
 
-The suite is `313 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+The suite is `317 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
 
 Correctness is established by a randomized differential harness (`tests/conformance/`)
 rather than by comparing rendered strings. It generates models satisfying C1–C4 with
