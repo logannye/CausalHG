@@ -6,3 +6,6 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+
+# Untracked reference PDFs: read locally, never redistributed from this repository.
+*.pdf
