@@ -47,13 +47,18 @@ class MechanismSpec:
     outputs: tuple[str, ...]
     latent: bool
     shape: str  # "positive" | "coupled" | "sparse"
-    declare_equalities: bool
+    emit_equalities: bool
+    """Whether to declare an `output_equalities` group over all outputs.
+
+    Normally set only when the kernel really is coupled, so the declaration is *valid*
+    in the sense of THEOREM_T1.md 1.1. The generator can also set it on a positive
+    kernel, producing a **mendacious** declaration: an equality the model does not
+    satisfy. That is the input class that makes T1's validity hypothesis load-bearing.
+    """
 
     def as_mechanism(self) -> Mechanism:
         equalities = (
-            (tuple(self.outputs),)
-            if self.declare_equalities and self.shape == "coupled" and len(self.outputs) > 1
-            else ()
+            (tuple(self.outputs),) if self.emit_equalities and len(self.outputs) > 1 else ()
         )
         return Mechanism(
             self.name,
@@ -230,6 +235,7 @@ def generate_model(
     declare_equalities: bool = True,
     n_variables: int | None = None,
     shapes: Sequence[str] | None = None,
+    mendacious: bool = False,
 ) -> RandomModel:
     """Generate one model satisfying C1-C4 by construction.
 
@@ -262,6 +268,12 @@ def generate_model(
                 choices += ["coupled", "coupled"]  # weight coupling up; it is the hard case
         shape = rng.choice(choices)
 
+        if mendacious:
+            # Declare an equality the kernel does not satisfy. Invalid by construction.
+            emit = shape == "positive" and len(outputs) > 1
+        else:
+            emit = declare_equalities and shape == "coupled" and len(outputs) > 1
+
         specs.append(
             MechanismSpec(
                 name=f"m{index}",
@@ -269,7 +281,7 @@ def generate_model(
                 outputs=outputs,
                 latent=rng.random() < 0.25,
                 shape=shape,
-                declare_equalities=declare_equalities,
+                emit_equalities=emit,
             )
         )
         for v in outputs:

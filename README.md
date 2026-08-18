@@ -257,18 +257,27 @@ separates everything, and a faithful reconstruction of the historical partial-de
 bug — which it catches 63 times. Results are byte-identical across `PYTHONHASHSEED`
 values.
 
-Two gaps are worth naming up front:
+One gap is worth naming up front:
 
-- **`Fact 4b` in `THEOREM_T1.md` is not proved.** It claims the determination closure
-  in the augmented blowup agrees with the closure in the hypergraph, by iteratively
-  adding nodes whose parents are all known. That iteration cannot derive `D` from
-  `{C}` when `C = D` are siblings produced by one mechanism, which is the case the
-  augmentation exists for — §5.1 of the same document describes the sibling reasoning
-  the proof does not perform. The implementation is unaffected, since it uses declared
-  equality rules, and the sweep above is empirical evidence that `T1` holds as stated;
-  but the proof as written does not establish it, and repairing it is outstanding.
 - **`d*`-separation is not wired into identification.** The oracle exists and is
   sound, but nothing in `identification/` consults it.
+
+`T1` previously carried a broken step (`Fact 4b`, a claimed equality between the
+declared determination closure and the true one, which fails on this framework's own
+`C = D` example). It has been repaired rather than patched: soundness never needed that
+equality, and no longer refers to it. The proof now turns on two separate conditions,
+which degrade in opposite ways —
+
+- **validity** — every declared `output_equalities` group really is equal. Soundness
+  needs only this. The compiler cannot check it, since it never sees the structural
+  functions, so declaring a false equality yields unsound verdicts (142 of them in the
+  sweep, which is how we know the hypothesis is load-bearing).
+- **declaration completeness** — the declared rules capture *all* functional
+  determination. Only completeness needs this, and where it fails the criterion misses
+  independences rather than inventing them.
+
+That asymmetry is the property to rely on: **under an incomplete rule set the oracle
+refuses, it does not err.**
 
 ## Documentation
 

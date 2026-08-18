@@ -5,13 +5,21 @@ True is the only failure that can corrupt a result. This sweep enumerates disjoi
 (X, Y, Z) triples over generated models and checks every claimed separation against the
 exact conditional independence in the model's own joint law.
 
-This matters more than the usual property test. `Fact 4b` in `THEOREM_T1.md` -- the step
-that is supposed to reconcile the determination closure of the augmented blowup with the
-closure in the hypergraph -- is not established by the argument given there: its
-parent-closure iteration cannot derive `D` from `{C}` when `C` and `D` are siblings
-produced by one mechanism, which is precisely the configuration the augmentation exists
-to handle. The theorem may well hold; the proof does not show it. Until the proof is
-repaired, this sweep is the evidence that the oracle behaves as T1 claims.
+The sweep is organized around the hypotheses of T1 as restated in `THEOREM_T1.md`, one
+test per hypothesis:
+
+- soundness needs only *validity* of the declared rules, so it is checked unconditionally
+  across positive, sparse, and singular kernels;
+- soundness genuinely depends on validity, so a model class with deliberately mendacious
+  declarations must produce false separations -- otherwise the hypothesis is decorative;
+- completeness additionally needs faithfulness and declaration completeness (DC), so it
+  is gated only on strictly positive kernels where both hold, and merely reported
+  elsewhere;
+- and DC must fail *one-sidedly*, costing completeness while leaving soundness intact.
+
+This replaces the earlier situation in which `Fact 4b` was carrying the soundness proof
+on an argument that does not hold. The proof no longer routes through it; these tests
+are the empirical counterpart.
 """
 from __future__ import annotations
 
@@ -43,6 +51,7 @@ def _sweep(
     declare_equalities: bool = True,
     shapes: Sequence[str] | None = None,
     model_count: int = MODEL_COUNT,
+    mendacious: bool = False,
 ) -> SweepResult:
     """Check every separation verdict over `model_count` models against the exact law."""
     unsound: list[str] = []
@@ -51,7 +60,12 @@ def _sweep(
     coupled = 0
 
     for seed in range(model_count):
-        model = generate_model(seed, declare_equalities=declare_equalities, shapes=shapes)
+        model = generate_model(
+            seed,
+            declare_equalities=declare_equalities,
+            shapes=shapes,
+            mendacious=mendacious,
+        )
         coupled += sum(
             1 for spec in model.mechanisms if spec.shape == "coupled" and len(spec.outputs) > 1
         )
@@ -143,4 +157,25 @@ def test_declaring_determination_recovers_independences(
         f"declared={declared.incomplete} undeclared={undeclared.incomplete}: declaring "
         "output equalities recovered no independence, so the determination closure is "
         "doing nothing"
+    )
+
+
+def test_validity_of_declared_rules_is_load_bearing() -> None:
+    """T1's validity hypothesis has content: violate it and soundness fails.
+
+    THEOREM_T1.md 1.1 requires the declared rules to be *valid* -- every equality they
+    assert must actually hold in the model -- and 3 uses that hypothesis exactly once, in
+    Step 4, to discharge the augmented conditioning set. The compiler cannot check
+    validity, since it never sees `F`.
+
+    Declaring an equality over the outputs of a mechanism whose kernel does *not* couple
+    them makes the closure add variables that are not determined, so paths get blocked
+    that should stay open. If this produced no unsound verdicts, the hypothesis would be
+    decorative and Step 4 would be doing no work.
+    """
+    mendacious = _sweep(mendacious=True)
+
+    assert mendacious.unsound, (
+        "declaring equalities that the kernels do not satisfy produced no false "
+        "separations, so T1's validity hypothesis is not load-bearing as stated"
     )
