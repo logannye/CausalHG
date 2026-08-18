@@ -556,3 +556,45 @@ def test_the_observational_law_constrains_a_cyclic_deletion_not_at_all() -> None
     assert len(variances) > 10_000, len(variances)
     assert max(variances) > 1e6, max(variances)
     assert min(covariances) < -1.0 and max(covariances) > 1.0
+
+
+def test_partial_solvability_biases_kernels_the_cycle_cannot_reach() -> None:
+    """Why `Solvability` is a real assumption and not bookkeeping.
+
+    The per-query condition asks whether the query's closure is acyclic, and that is the
+    right question for Lemma 1.1. It is not the only question. If the ambient cyclic system
+    has no solution for some noise draws, then what was recorded is the *solvable
+    subpopulation*, and solvability is an event that depends on the variables -- so
+    conditioning on it is a selection, and selection biases things the cycle has no path to.
+
+    Here the ancestry `{S, X, Y}` is completely acyclic and the check passes. The cycle is
+    strictly downstream and feeds nothing back. Yet on the solvable half the conditional
+    kernels are wrong by a third, and even `P(S)` -- an exogenous variable upstream of
+    everything, in no closure the cycle touches -- moves from mean 0 to mean 0.5.
+
+    So the assumption is not "the law exists". It is that nothing was silently dropped.
+    """
+    rng = np.random.default_rng(0)
+    n = 400_000
+    s = rng.normal(0, 1, n)
+    x = s + rng.normal(0, 1, n)
+    y = x + rng.normal(0, 1, n)
+
+    # downstream cycle: W = Z**2, Z = (X + Y) - W, i.e. Z = a - Z**2 with a = X + Y.
+    # A real solution exists only where a >= -1/4.
+    solvable = (x + y) >= -0.25
+    assert 0.2 < 1 - solvable.mean() < 0.8, "the fixture must lose a real share of draws"
+
+    def slope(outcome, given):
+        return np.cov(outcome, given)[0, 1] / np.var(given)
+
+    # On the full population every kernel is its structural self.
+    assert slope(y, x) == pytest.approx(1.0, abs=0.02)
+    assert slope(x, s) == pytest.approx(1.0, abs=0.02)
+    assert s.mean() == pytest.approx(0.0, abs=0.02)
+
+    # On the solvable subpopulation -- which is what a dataset would contain -- none of
+    # them is, including the marginal of a variable the cycle cannot reach.
+    assert abs(slope(y[solvable], x[solvable]) - 1.0) > 0.2
+    assert abs(slope(x[solvable], s[solvable]) - 1.0) > 0.2
+    assert s[solvable].mean() > 0.3

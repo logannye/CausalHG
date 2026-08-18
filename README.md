@@ -111,8 +111,17 @@ kernel — its inputs and outputs are mutually determined.
 An answer on a cyclic graph declares what it rests on. `C1` is replaced by `C1 (local)`,
 and `Solvability` is added: under C1 the law is defined by sampling in topological order,
 which is total, and without C1 there is no such procedure — the law is the pushforward of
-the noise through the solution of `V = F(V, U)`, which may have none or many. The compiler
-never sees `F`, so it records that rather than checking it, exactly as it does for C2.
+the noise through the solution of `V = F(V, U)`, which may have none or many.
+
+That assumption carries more weight than "the law exists", and it is the one place where a
+cycle reaches past the query's closure. Where solutions fail to exist, the recorded data
+are the **solvable subpopulation**, and solvability is an event that depends on the
+variables — so conditioning on it is a *selection*. In a measured case where a strictly
+downstream cycle has no solution for 47% of noise draws, the conditional kernels of the
+acyclic ancestry come out a third wrong, and the marginal of an exogenous variable upstream
+of everything moves from mean 0 to mean 0.5. An acyclic closure does not protect against
+it. The compiler never sees `F`, so it records this rather than checking it, exactly as it
+does for C2.
 
 Three things refuse rather than answer on a cyclic graph: `d_separated` and
 `check_covariates`, because `THEOREM_T1.md`'s soundness proof rests on C1 (its Lemma 2.1
@@ -517,7 +526,7 @@ theorem, its assumptions, and its derivation attached.
 
 ## Status and known gaps
 
-The suite is `295 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+The suite is `296 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
 
 Correctness is established by a randomized differential harness (`tests/conformance/`)
 rather than by comparing rendered strings. It generates models satisfying C1–C4 with
