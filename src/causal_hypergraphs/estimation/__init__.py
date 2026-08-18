@@ -8,11 +8,13 @@ against the data actually in hand, naming the strata where they fail.
 from .dataset import Dataset, DatasetError, Point
 from .empirical import EmpiricalModel
 from .estimator import (
+    DEFAULT_POLICY_FLOOR,
     DISCHARGEABLE_CODES,
     METHODS,
     Estimate,
     EstimationError,
     NotIdentified,
+    PolicySupport,
     SupportFailure,
     SupportReport,
     UnsupportedEstimand,
@@ -28,7 +30,9 @@ __all__ = [
     "Estimate",
     "EstimationError",
     "NotIdentified",
+    "DEFAULT_POLICY_FLOOR",
     "Point",
+    "PolicySupport",
     "SupportFailure",
     "SupportReport",
     "UnsupportedEstimand",

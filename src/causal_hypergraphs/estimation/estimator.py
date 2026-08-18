@@ -101,6 +101,97 @@ class SupportFailure:
         return f"{self.kernel} undefined at {cells} ({self.points} point(s) unreachable)"
 
 
+DEFAULT_POLICY_FLOOR = 30
+"""Effective rows below which a policy's leverage is reported as a failure.
+
+A convention, and named as one. It is the point below which a multinomial cell estimate
+stops being usable rather than a property of any particular estimand, so it is a keyword
+argument on `estimate`. What is *not* a convention is `PolicySupport.effective_n`: that
+number is computed and printed whatever the floor is, so the disclosure never depends on
+the threshold and a caller who disagrees with 30 still sees what the answer rests on.
+"""
+
+
+@dataclass(frozen=True)
+class PolicySupport:
+    """How many rows an estimand's answer actually rests on, given the policy's weights.
+
+    A deletion estimand is ``sum_t (downstream)(t) * P0^m(t)``. The factor at ``t`` is
+    estimated from the rows showing ``out(m) = t``, so the policy's weights decide which
+    rows carry the answer. Concentrate the mass on a level the data barely populates and
+    the estimate rests on a handful of rows while the header still reports the whole table.
+
+    Positivity cannot see this. It asks whether a conditioning cell is *empty*; this asks
+    whether a non-empty cell is being *leaned on*. They are separate findings and are kept
+    separate for the reason `Backend positivity` is not `Downstream positivity`: a report
+    that flipped positivity to FAIL here would be describing a stratum that is not empty.
+    """
+
+    mechanism: str
+    variables: tuple[str, ...]
+    weights: Mapping[Point, float]
+    rows: Mapping[Point, int]
+    n_rows: int
+    floor: int
+    effective_n: float | None
+    """``1 / sum_t (w_t**2 / n_t)`` -- the inverse-variance count.
+
+    `None` when the policy feeds no kernel that reads the data, which is not a small
+    number but an inapplicable one: there is no leverage to weigh. The two must not share
+    a representation, for the same reason `min_stratum_count` distinguishes `None` from 0.
+    """
+
+    @property
+    def holds(self) -> bool:
+        return self.effective_n is None or self.effective_n >= self.floor
+
+    @property
+    def overstatement(self) -> float | None:
+        """How many times the header row count exceeds the count behind the answer.
+
+        Disclosed on PASS as well as FAIL, and deliberately so: the floor is a convention
+        about when a cell stops being estimable, while this is the size of the gap between
+        what the report says and what the answer rests on. A policy can clear any floor and
+        still be standing on a ninetieth of the table.
+        """
+        if self.effective_n is None or self.effective_n <= 0.0:
+            return None
+        return self.n_rows / self.effective_n
+
+    @property
+    def heaviest(self) -> tuple[Point, float] | None:
+        """The level carrying the most policy mass, which is the one to report."""
+        if not self.weights:
+            return None
+        return max(self.weights.items(), key=lambda item: item[1])
+
+    def summary(self) -> str:
+        if self.effective_n is None:
+            return (
+                f"P0_{self.mechanism} feeds no kernel estimated from these data, so the "
+                f"answer carries no data-backed leverage to weigh"
+            )
+        heaviest = self.heaviest
+        assert heaviest is not None  # effective_n is None when there are no weights
+        key, mass = heaviest
+        cells = ", ".join(
+            f"{name}={value!r}" for name, value in zip(self.variables, key, strict=False)
+        )
+        backing = self.rows.get(key, 0)
+        over = self.overstatement
+        gap = f" ({over:.0f}x the reported count)" if over is not None and over >= 1.5 else ""
+        if self.holds:
+            return (
+                f"P0_{self.mechanism} rests on {self.effective_n:.0f} effective row(s) "
+                f"of {self.n_rows}{gap}"
+            )
+        return (
+            f"P0_{self.mechanism} puts {mass:.3g} of its mass on {cells}, which "
+            f"{backing} row(s) back; the answer rests on {self.effective_n:.0f} effective "
+            f"row(s), not the {self.n_rows} reported above{gap}"
+        )
+
+
 @dataclass(frozen=True)
 class SupportReport:
     """The outcome of discharging the estimand's positivity certificates."""
@@ -155,6 +246,13 @@ class Estimate:
     bootstrap: int = 0
     level: float = 0.95
     replicate_failures: int = 0
+    policy: tuple[PolicySupport, ...] = ()
+    """What each deletion policy's answer actually rests on, given its weights.
+
+    Reported beside the positivity certificates rather than folded into them: an estimand
+    can have every conditioning cell populated -- positivity genuinely holding -- while the
+    policy leans the whole answer on the thinnest of them.
+    """
     plan: EliminationPlan | None = None
     """What evaluating this estimand cost, and what enumerating it would have.
 
@@ -200,6 +298,9 @@ class Estimate:
             lines.append(f"    {self.support.summary()}")
         else:
             lines.append("    (this estimand carries no dischargeable certificate)")
+        for report in self.policy:
+            lines.append(f"    Policy support: {'PASS' if report.holds else 'FAIL'}")
+            lines.append(f"    {report.summary()}")
         for failure in self.support.failures:
             lines.append(f"    ! {failure}")
         return "\n".join(lines)
@@ -421,6 +522,71 @@ def _check_policy_support(
                     )
 
 
+def _policy_support(
+    identified: Identified,
+    data: Dataset,
+    fallbacks: Mapping[str, Mapping[Point, float]] | None,
+    floor: int,
+) -> tuple[PolicySupport, ...]:
+    """Weigh each deletion policy against the rows that back the levels it leans on.
+
+    The denominator per level is the row count over `out(m)` itself, not over the
+    conditioning cell of any one downstream kernel: `out(m)` is what the policy indexes and
+    what the sum ranges over, so it is the axis along which the weights redistribute the
+    data. Reading the count off a particular kernel's cell would report a different number
+    for each factor and none of them for the estimand.
+
+    A policy whose outputs no data-reading kernel conditions on gets `effective_n=None`
+    rather than a number -- the marginalized and policy-only shapes have no leverage to
+    weigh, and reporting a small figure for them would read as a warning about nothing.
+    """
+    if not fallbacks:
+        return ()
+    kernels = tuple(identified.expression.kernels())
+    reads_data = {
+        name
+        for kernel in kernels
+        if kernel.kind != "fallback"
+        for name in kernel.given
+    }
+    reports: list[PolicySupport] = []
+    for kernel in kernels:
+        if kernel.kind != "fallback":
+            continue
+        mechanism = kernel.label.removeprefix("P0_")
+        table = fallbacks.get(mechanism)
+        if table is None:
+            continue
+        weights = {key: mass for key, mass in table.items() if mass > 0.0}
+        countable = all(name in data.variables for name in kernel.variables)
+        if not weights or not countable or not (set(kernel.variables) & reads_data):
+            effective: float | None = None
+            rows: Mapping[Point, int] = {}
+        else:
+            rows = data.counts(kernel.variables)
+            burden = 0.0
+            for key, mass in weights.items():
+                backing = rows.get(key, 0)
+                if backing == 0:
+                    # Already refused by `_check_policy_support`; be total anyway.
+                    burden = float("inf")
+                    break
+                burden += mass * mass / backing
+            effective = 0.0 if burden == float("inf") else 1.0 / burden
+        reports.append(
+            PolicySupport(
+                mechanism=mechanism,
+                variables=kernel.variables,
+                weights=weights,
+                rows=rows,
+                n_rows=data.n_rows,
+                floor=floor,
+                effective_n=effective,
+            )
+        )
+    return tuple(reports)
+
+
 def estimate(
     result: IdentificationResult | Identified,
     data: Dataset,
@@ -432,6 +598,7 @@ def estimate(
     seed: int = 0,
     method: str = "eliminate",
     max_entries: int = DEFAULT_MAX_ENTRIES,
+    policy_floor: int = DEFAULT_POLICY_FLOOR,
 ) -> Estimate:
     """Evaluate an identified estimand against `data` and discharge its certificates.
 
@@ -457,6 +624,10 @@ def estimate(
     max_entries:
         Largest intermediate table elimination may build. Exceeding it raises
         `IntractableQuery` naming the variables that met, rather than exhausting memory.
+    policy_floor:
+        Effective rows below which a policy's leverage is reported as a failure. The
+        effective count is computed and printed whatever this is set to, so lowering it
+        hides a verdict, never the number behind it.
 
     Returns
     -------
@@ -538,6 +709,8 @@ def estimate(
         thinnest_stratum=thinnest,
     )
 
+    policy = _policy_support(identified, data, fallbacks, policy_floor)
+
     interval: dict[Point, tuple[float, float] | None] = {}
     replicate_failures = 0
     if bootstrap > 0:
@@ -568,6 +741,7 @@ def estimate(
         bootstrap=bootstrap,
         level=level,
         replicate_failures=replicate_failures,
+        policy=policy,
         plan=plan,
         method=method,
     )
