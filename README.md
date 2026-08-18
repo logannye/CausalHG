@@ -1,95 +1,65 @@
 # Causal Hypergraphs
 
-Causal Hypergraphs is a Python research library for **mechanism-level causal
-identification**.
+A Python research library for **mechanism-level causal identification**.
 
-It extends Pearl-style structural causal modeling with first-class mechanisms:
-typed hyperedges with multiple inputs and jointly produced outputs. The goal is
-not to exceed Pearl SCMs in expressive power. Pearl with enough latent variables
-is universal. The goal is to make mechanism-level interventions explicit,
-inspectable, and identifiable when the graph structure supports them.
+Most causal tooling asks what happens when you set a *variable* to a value. A lot of
+real interventions do not work that way. You knock out a reaction, swap an enzyme,
+inhibit a pathway, replace an ETL step, change a policy rule. The thing you
+manipulate is a **mechanism** — a process with several inputs and several jointly
+produced outputs — and the variables move as a consequence.
 
-The current `minimal_model/` package is retained as a reference model while the
-new `src/causal_hypergraphs/` package grows into the main API.
+Causal Hypergraphs makes that mechanism a first-class object. You describe a system
+as typed hyperedges, ask a mechanism-level question, and get back either an
+identified estimand with the theorem and assumptions it rests on, or an explicit
+refusal that tells you what is missing.
 
-## Core Idea
+> **Status: research software, pre-1.0.** The formal core is deliberately narrow and
+> the compiler refuses outside it. See [Status and known gaps](#status-and-known-gaps)
+> before relying on it. Not for scientific or clinical claims without independent
+> validation of the graph, the assumptions, and the estimand.
 
-Many real interventions act on mechanisms, not individual variables:
+---
 
-- delete a reaction,
-- replace an enzyme,
-- inhibit a pathway,
-- swap an ETL step,
-- remove an evidence-generating process,
-- revise a bundled policy mechanism.
+## The idea
 
-In a causal hypergraph, a mechanism `m` has inputs and outputs:
+A mechanism `m` has an input boundary and an output boundary:
 
 ```text
 m: in(m) -> out(m)
 ```
 
-Under the v1 assumptions, the observational distribution factorizes by
-mechanism:
+Its outputs are produced *jointly*, from shared noise. That is the part a
+variable-level DAG cannot say. A reaction `A + B -> C + D` produces `C` and `D`
+together with their rates linked by stoichiometry; a five-subunit complex binding is
+not ten pairwise interactions; a drug ablating an enzyme acts on a *reaction*, not on
+a *molecule*.
+
+Under the v1 assumptions the observational law factorizes one factor per mechanism:
 
 ```text
-P(V) = product P(exogenous variables) * product P(out(m) | in(m))
+P(V) = prod_{v exogenous} P(v) * prod_{m} P(out(m) | in(m))
 ```
 
-That makes mechanism deletion a local factor replacement. When every variable is
-observed, each chain-rule factor is itself an observational quantity, so the
-target factor is *omitted* rather than divided out:
+and a mechanism intervention is a **local factor swap** — delete one factor and put
+something else in its place. Two operations are supported:
 
-```text
-P(V | delete(m)) =
-  product_{v exogenous} P(v)
-  * product_{m' != m} P(out(m') | in(m'))
-  * product_{v in out(m)} P0(v)
+- `delete(m)` — remove the mechanism; its orphaned outputs fall back to declared
+  laws `P0(v)`.
+- `replace(m, m')` — keep the wiring, change the function. Requires
+  `rho(m') = rho(m)`: same inputs, same outputs.
+
+## Install
+
+```bash
+pip install -e ".[dev]"
 ```
 
-and mechanism replacement swaps the factor rather than deleting it:
+Requires Python 3.11+. The only runtime dependency is NumPy.
 
-```text
-P(V | replace(m, m_prime)) =
-  product_{v exogenous} P(v)
-  * product_{m' != m} P(out(m') | in(m'))
-  * P_m_prime(out(m) | in(m))
-```
-
-Writing the estimand this way matters. The equivalent quotient form
-`P(V) / P(out(m) | in(m)) * ...` is `0/0` whenever the target mechanism is
-deterministic with functionally coupled outputs — and under C2 that is the
-generic case, since a mechanism whose noise carries fewer degrees of freedom
-than it has outputs induces a singular factor. Deleting such a mechanism moves
-probability mass onto configurations the observational law never visits, which
-is exactly where the quotient is undefined. Omitting the factor is defined
-everywhere the intervention puts mass.
-
-When hidden variables are present the surviving factors are not individually
-identified, so `T6` must go through the quotient and therefore carries an
-explicit `Target positivity` certificate.
-
-The library compiles those queries into proof-carrying estimands when the
-current theory identifies them.
-
-## What This Library Does
-
-Given a typed mechanism graph and a query, Causal Hypergraphs returns:
-
-- an identified estimand,
-- the theorem used,
-- the assumptions required,
-- a derivation certificate,
-- or an honest `Unknown` / `Unidentified` result.
-
-Example:
+## Quickstart
 
 ```python
-from causal_hypergraphs import (
-    DeleteMechanism,
-    MechanismGraph,
-    identify,
-)
+from causal_hypergraphs import DeleteMechanism, Identified, MechanismGraph, identify
 
 graph = MechanismGraph(
     variables={"A", "B", "C", "D", "E", "F"},
@@ -97,196 +67,221 @@ graph = MechanismGraph(
         "m1": {"inputs": {"A", "B"}, "outputs": {"C", "D"}},
         "m2": {"inputs": {"C", "E"}, "outputs": {"F"}},
     },
-    observed_variables={"A", "B", "C", "D", "E", "F"},
 )
 
 result = identify(graph, DeleteMechanism("m1"))
 
-print(result.status)
-print(result.expression)
-print(result.theorem)
-```
-
-Expected result:
-
-```text
-identified
-P(A) * P(B) * P(E) * P(F | C,E) * P0(C) * P0(D)
-T2
-```
-
-## Public API
-
-```python
-from causal_hypergraphs import (
-    DeleteMechanism,
-    Identified,
-    Mechanism,
-    MechanismGraph,
-    ReplaceMechanism,
-    Unknown,
-    identify,
-)
-```
-
-Primary query flow:
-
-```python
-result = identify(
-    graph=graph,
-    query=DeleteMechanism("m1"),
-    observed_variables={"A", "B", "C", "D", "E", "F"},
-)
-```
-
-The compiler returns structured results, not booleans:
-
-```python
 if isinstance(result, Identified):
-    print(result.expression)
-    print(result.theorem)
-    print(result.assumptions)
-    print(result.derivation)
-elif isinstance(result, Unknown):
-    print(result.reason)
-    print(result.next_algorithm)
-    print(result.suggestions)
+    print(result.theorem)      # T2
+    print(result.expression)   # P(A) * P(B) * P(E) * P(F | C,E) * P0(C) * P0(D)
+    for assumption in result.assumptions:
+        print(assumption.code) # C1 C2 C3 C4 P0 Observed boundary Downstream positivity
+    for step in result.derivation:
+        print(step.label)      # Validate graph / Factorize / Omit target factor
 ```
 
-## V1 Assumptions
+The estimand is an AST, not a string. It renders to text and LaTeX, exposes its
+scope and the primitive kernels it references, and has a canonical key for
+comparison.
 
-The first version intentionally supports a narrow, defensible formal core:
+### Refusal is a first-class outcome
 
-- **C1:** the mechanism dependency graph is acyclic.
-- **C2:** mechanisms have independent exogenous noise.
-- **C3:** each mechanism has input/output role typing.
-- **C4:** each variable has at most one producing mechanism.
+The compiler will not return a plausible-looking formula it cannot justify. Declaring
+fallback laws for everything *except* `m1`'s outputs turns the same query into a
+refusal that names the gap:
 
-These assumptions make the mechanism-level chain rule valid. If they fail, the
-compiler refuses rather than returning an unsound estimand.
+```python
+graph = MechanismGraph(
+    variables={"A", "B", "C", "D", "E", "F"},
+    mechanisms={
+        "m1": {"inputs": {"A", "B"}, "outputs": {"C", "D"}},
+        "m2": {"inputs": {"C", "E"}, "outputs": {"F"}},
+    },
+    fallback_variables={"A", "B", "E", "F"},   # no P0 for C or D
+)
 
-## Current Capabilities
+result = identify(graph, DeleteMechanism("m1"))
 
-- Standard `pyproject.toml` package layout.
-- Formal compiler semantics in `SPEC.md`.
-- Typed mechanism graph validation.
-- Mechanism deletion and replacement queries.
-- T2/T3 identifiers under full observability.
-- T4/T6 identifiers under observed-boundary hidden-variable settings.
-- Expression AST with canonical products, scope introspection, primitive kernel
-  extraction, marginalization, and plain-text/LaTeX rendering.
-- Proof-carrying result objects with assumptions and derivation steps.
-- Equality-aware d*-separation for the bipartite blowup.
-- T7 preparation objects: typed bipartite DAG construction, latent projection to
-  a bipartite ADMG, and stochastic-intervention reduction records.
-- Isolated Pearl-ID backend for observational marginals, Markovian truncated
-  factorization, and the canonical front-door pattern.
-- Opt-in T7 front-door vertical slice via
-  `identify(..., DeleteMechanism("m_x", outcomes={...}), allow_t7=True)`.
-- Canonical reaction-network examples.
-- Compatibility test coverage for the existing `minimal_model/` reference code.
+result.status              # 'unknown'
+result.reason              # 'Mechanism deletion would orphan outputs without a
+                           #  declared fallback policy.'
+result.missing_variables   # ('C', 'D')
+result.suggestions[0]      # 'Declare fallback distribution P0(C).'
+```
 
-Additionally:
+Three outcomes exist: `Identified`, `Unknown` (this compiler cannot do it, and here
+is what would help), and `Unidentified` (a backend produced a non-identification
+witness). Because `identify` returns the base type, the type checker will not let you
+read an estimand before establishing that you have one.
 
-- Finite-discrete semantics for the estimand AST
-  (`causal_hypergraphs.semantics`), so a compiled estimand can be *evaluated*
-  and compared against an interventional law rather than against an expected
-  string. Undefined quantities raise rather than becoming `nan`.
-- Kernel-form (division-free) identifiers under full observability, defined even
-  when the target mechanism factor is singular.
-- `O(V + E)` d*-separation by Bayes-Ball reachability.
-- Verified replacement incidence when a `Mechanism` is supplied, which
-  discharges the `rho(m') = rho(m)` certificate into a derivation step.
+### Evaluating an estimand
 
-## Not Yet Supported
+An estimand is only meaningful if it can be *computed*. `causal_hypergraphs.semantics`
+evaluates one against a finite discrete model, which is what makes the compiler's
+claims testable rather than merely well-formed:
 
-- Complete T7 Pearl-ID reduction beyond the current front-door vertical slice.
-- Hyper-hedge completeness.
-- Complete Pearl-ID support beyond the currently implemented backend cases.
-- General functional-determination closure beyond declared equality rules.
-- Cyclic mechanism graphs.
-- Markov-kernel mechanisms.
-- Joint per-mechanism fallback kernels. `P0` is a product of per-variable laws,
-  so `delete(m)` necessarily renders `out(m)` mutually independent and cannot
-  express a post-deletion law that preserves coupling among the orphaned
-  outputs. The generalization to `P0^m(out(m))` is stated in
-  `THEOREM_T2_T3.md` Remark T3.3; every result goes through with it.
-- Estimator compilation: the discrete semantics evaluates an estimand against a
-  supplied model, but nothing estimates the primitives from samples.
-- Transition/Petri-net semantics with multiple producers.
-- Production-grade estimators over empirical data.
+```python
+from causal_hypergraphs.semantics import DiscreteModel, evaluate
 
-Unsupported cases return explicit `Unknown` results with assumptions and
-suggested next steps.
+model = DiscreteModel(domains=..., joint=..., fallbacks={"C": ..., "D": ...})
+value = evaluate(result.expression, model, {"A": 0, "B": 1, "C": 0, "D": 0, "E": 1, "F": 1})
+```
 
-## Why Not Just Use Pearl SCMs?
+Evaluation is total or loud: an undefined quantity raises `UndefinedEstimand` rather
+than quietly becoming `nan`.
 
-Pearl SCMs can represent the same distributions with enough latent variables.
-The difference is intervention vocabulary.
+## Two forms of the same identifier
 
-In Pearl form, deleting a multi-output mechanism becomes a multi-variable
-stochastic intervention or an intervention on an unnamed latent. In a causal
-hypergraph, the mechanism is named directly:
+This is the one piece of internal detail worth knowing, because it determines when a
+query works.
+
+A factor swap can be written two ways, which agree wherever both are defined but do
+**not** have the same domain:
 
 ```text
-delete(m)
-replace(m, m_prime)
+quotient form:  P(V) / P(out(m) | in(m)) * <new factor>
+kernel form:    prod_exo P(v) * prod_{m' != m} P(out(m') | in(m')) * <new factor>
 ```
 
-That better matches scientific and engineering practice.
+Assumption C2 gives mechanisms deterministic structural functions driven by exogenous
+noise. When that noise carries fewer degrees of freedom than `|out(m)|` — which is
+what stoichiometric coupling *is* — the factor `P(out(m) | in(m))` is **singular**.
+Deleting such a mechanism moves probability onto configurations the observational law
+never visits, so the quotient is `0/0` on exactly the region the intervention creates.
 
-## Installation
+The compiler therefore emits the kernel form whenever every chain-rule factor is
+observational, and falls back to the quotient only when hidden variables leave no
+alternative — recording a `Target positivity` certificate when it does.
 
-```bash
-pip install -e ".[dev]"
-```
+## Assumptions
+
+The formal core is narrow on purpose. If these fail, the compiler refuses rather than
+returning an unsound estimand.
+
+| | |
+|---|---|
+| **C1** | The mechanism dependency graph is acyclic. |
+| **C2** | Mechanisms have independent exogenous noise. |
+| **C3** | Mechanisms have input/output role typing. |
+| **C4** | Each variable has at most one producing mechanism. |
+
+C1, C3 and C4 are checked when the graph is constructed. C2 is semantic rather than
+structural, so it is recorded as an assumption certificate on every result.
+
+## How this relates to Pearl
+
+**It is not more expressive.** Pearl with enough latent variables is universal, and
+this framework reduces to a Pearl DAG through a bipartite blowup — mechanisms become
+nodes. The documents prove that reduction and then use it.
+
+More precisely: under C1–C4, the districts (c-components) of the latent-projected
+bipartite ADMG are exactly the mechanism output sets `{out(m)}`
+(`THEOREM_T4_T5.md`, Proposition T4.0). So the mechanism-level chain rule *is* the
+Tian-Pearl c-component factorization for this graph class, and a mechanism
+intervention is exactly one that replaces a complete district's kernel. That is why
+mechanism deletion is always identifiable under full observability where a variable
+intervention need not be: C4 aligns the intervention unit with the district, and
+there is no such thing as a mechanism intervention on part of one.
+
+Against the soft-intervention literature — Tian & Pearl (2001) on mechanism change,
+Correa & Bareinboim (2020) on the sigma-calculus — this framework's intervention space
+is a **subset**, not a superset: a sigma-intervention may change a mechanism's parent
+set, while `replace(m, m')` pins the incidence.
+
+What the library offers is therefore not new identification power. It is that the
+well-behaved unit has a name in the object language, so a query is a single typed
+operation rather than a multi-variable translation, and the answer arrives with its
+theorem, its assumptions, and its derivation attached.
+
+## What is implemented
+
+- Typed mechanism graph with C1/C3/C4 validation at construction.
+- `delete` and `replace` queries; `T2`/`T3` (full observation), `T4`/`T4.1` (latent
+  mechanisms), `T6` (hidden variables, observed target boundary).
+- Kernel-form identifiers where available; quotient plus an explicit positivity
+  certificate where not.
+- Expression AST: canonical products, scope and kernel introspection,
+  marginalization, text and LaTeX rendering.
+- Proof-carrying results with assumptions and derivation steps, and structured
+  refusals with suggested next steps.
+- Verified replacement incidence when a `Mechanism` is supplied, which discharges the
+  `rho(m') = rho(m)` certificate into a derivation step.
+- Finite-discrete semantics for evaluating estimands.
+- `d*`-separation on the bipartite blowup with equality-based determination closure,
+  by Bayes-Ball reachability in `O(V + E)`.
+- A deliberately isolated Pearl-ID backend (observational marginals, Markovian
+  truncated factorization, the canonical front-door pattern) and an opt-in `T7`
+  front-door slice via `identify(..., allow_t7=True)`.
+- `minimal_model/`: a NumPy reference implementation with executable semantics for
+  all three do-operators and per-mechanism counterfactual abduction.
+
+## Not yet supported
+
+- Complete `T7` Pearl-ID reduction. The opt-in slice handles single-output mechanism
+  deletion only — which is the Pearl-degenerate case, not the hypergraph one.
+- Hyper-hedge completeness. Open conjecture.
+- Complete Pearl-ID beyond the currently implemented backend cases.
+- Cyclic mechanism graphs; Markov-kernel mechanisms; richer role typing
+  (substrate / enzyme / product); mechanism-correlated noise.
+- **Joint fallback kernels.** `P0` is a product of per-variable laws, so `delete(m)`
+  necessarily renders `out(m)` mutually independent, and a post-deletion law that
+  preserves coupling among the orphaned outputs cannot be expressed. The
+  generalization to `P0^m(out(m))` is stated in `THEOREM_T2_T3.md` Remark T3.3 and
+  every result goes through with it.
+- Estimators. The discrete semantics evaluates an estimand against a model you
+  supply; nothing estimates the primitive kernels from samples.
+
+## Status and known gaps
+
+The suite is `109 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+Estimands are checked by evaluating them against interventional ground truth, and the
+oracle is itself tested against deliberately wrong estimands so that it can be shown
+to fail.
+
+Two gaps are worth naming up front:
+
+- **`Fact 4b` in `THEOREM_T1.md` is not proved.** It claims the determination closure
+  in the augmented blowup agrees with the closure in the hypergraph, by iteratively
+  adding nodes whose parents are all known. That iteration cannot derive `D` from
+  `{C}` when `C = D` are siblings produced by one mechanism, which is the case the
+  augmentation exists for — §5.1 of the same document describes the sibling reasoning
+  the proof does not perform. The implementation is unaffected, since it uses declared
+  equality rules; the theorem may well hold; the proof as written does not establish
+  it. `T1`'s soundness has not been differential-tested the way `T2` has.
+- **`d*`-separation is not wired into identification.** The oracle exists and is
+  sound, but nothing in `identification/` consults it.
+
+## Documentation
+
+| File | Contents |
+|---|---|
+| `whitepaper.md` | Full development: formalism, T1–T7, related work, worked example. |
+| `FOUNDATIONS.md` | Definitions: hypergraph SCM, typed incidence, the three do-operators. |
+| `SPEC.md` | Normative compiler semantics: objects, queries, theorem dispatch, refusals. |
+| `MINIMAL_EXAMPLE.md` | The reaction-network example end to end. |
+| `THEOREM_T1.md` | `d*`-separation soundness and completeness. |
+| `THEOREM_T2_T3.md` | Mechanism chain rule; deletion and replacement identifiers. |
+| `THEOREM_T4_T5.md` | Latent mechanisms; districts; reduction of variable interventions. |
+| `THEOREM_H1_PLUS.md` | Hidden variables (`T6`), the `T7` track, the hyper-hedge conjecture. |
 
 ## Development
 
 ```bash
 python -m pytest -q
-ruff check .
-pyright
+python -m ruff check .
+python -m pyright
 ```
 
-## Repository Structure
+## Repository layout
 
 ```text
 src/causal_hypergraphs/
-  graph/              typed incidence and validation
-  expression/         probability expression algebra
-  identification/     T2/T3/T4/T6 compilers and result objects
-  separation/         d*-separation and deterministic closure
-  semantics/          optional simulation/counterfactual helpers, planned
+  graph/            typed incidence and validation
+  expression/       probability expression algebra
+  identification/   T2/T3/T4/T6 compilers, Pearl-ID backend, T7 track
+  separation/       d*-separation and determination closure
+  semantics/        finite-discrete evaluation of estimands
 
-minimal_model/        compatibility reference implementation
-
-examples/             planned notebook/script examples
-tests/                compiler and API tests
+minimal_model/      NumPy reference implementation
+tests/              compiler, semantics, and separation tests
 ```
-
-## Examples
-
-The new package includes importable example graph builders:
-
-- `reaction_graph()`: `m1: A,B -> C,D`; `m2: C,E -> F`.
-- `latent_mechanism_graph()`: adds `m_lat: empty -> B,E`.
-- `hidden_variable_graph()`: adds hidden `W`; T6 accepts `m1` and returns
-  `Unknown(next_algorithm="T7 Pearl-ID reduction")` for the boundary-violating
-  `m_2` query.
-
-## Roadmap
-
-1. Stabilize packaging and preserve the existing 60-test reference suite.
-2. Build expression-returning T2/T3/T4/T6 identifiers.
-3. Add proof-carrying result objects and LaTeX/text rendering.
-4. Implement bipartite ADMG and Pearl-ID reduction for T7.
-5. Return hedge and hyper-hedge witnesses for non-identification.
-6. Add estimator compilation and experiment-design suggestions.
-
-## Status
-
-This project is research software. It is intended for causal-inference
-researchers and technical teams exploring mechanism-level causal queries. It
-should not be used for scientific or clinical claims without independent
-validation of the graph, assumptions, and estimands.
