@@ -603,3 +603,11 @@ minimal_model/      NumPy reference implementation
 tests/              compiler, semantics, and separation tests
 tests/conformance/  model generator and exact-ground-truth checkers
 ```
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+The patent grant is the reason for Apache-2.0 over MIT: the identification
+results here are methods, and a permissive licence that is silent on patents
+leaves a user guessing about the one right they most need.
