@@ -570,7 +570,7 @@ theorem, its assumptions, and its derivation attached.
 
 ## Status and known gaps
 
-The suite is `310 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+The suite is `311 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
 
 Correctness is established by a randomized differential harness (`tests/conformance/`)
 rather than by comparing rendered strings. It generates models satisfying C1–C4 with
@@ -578,13 +578,21 @@ strictly positive, structurally sparse, and singular ("all outputs equal") kerne
 computes exact interventional laws the compiler never sees, and checks the compiler
 against them. On the current sweep:
 
-- **Identifiers.** 976 queries over 220 generated models; 821 identified across all five
-  theorem branches (`T2` 186 / `T3` 140 / `T4` 179 / `T4.1` 154 / `T6` 162), 788 verified
-  pointwise against the exact interventional law, and 33 skipped because a positivity
-  assumption the result *itself records* fails in that model. An estimand that cannot be
-  evaluated while recording no such assumption is a failure, not a skip. The branch mix is
-  gated: a branch `_theorem` can return that no model reaches fails the sweep, and the
-  population is parsed from the compiler rather than listed here.
+- **Identifiers.** 5,504 queries over 220 generated models — the full joint, plus one
+  marginal query per observed variable; 4,765 identified across all five theorem branches
+  (`T2` 1,070 / `T3` 841 / `T4` 1,081 / `T4.1` 959 / `T6` 814), 4,606 verified pointwise
+  against the exact interventional law, and 159 skipped because a positivity assumption the
+  result *itself records* fails in that model. An estimand that cannot be evaluated while
+  recording no such assumption is a failure, not a skip. The branch mix is gated: a branch
+  `_theorem` can return that no model reaches fails the sweep, and the population is parsed
+  from the compiler rather than listed here.
+- **Marginal queries.** 4,528 of those queries pass `outcomes=`, and 3,818 are verified
+  against the law marginalized to that outcome. This lane is what exercises the ancestral
+  reduction. Until it existed the sweep issued only full-joint queries, so the reduction
+  was covered by a single dedicated file — and the gap was not theoretical: reinstating the
+  co-output defect that reduction shipped with leaves the sweep green without these cases
+  and produces 268 nonconforming estimands with them. The gate requires the marginal lane
+  to carry most of the verified queries, not merely to exist.
 - **`d*`-separation.** 5,400 (X, Y, Z) triples, **zero unsound verdicts** — every
   claimed separation is an actual conditional independence in the model's own law. On
   models with strictly positive kernels, where faithfulness is generic, there were also
