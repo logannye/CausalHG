@@ -246,6 +246,40 @@ def test_an_empty_stratum_is_named_rather_than_divided_through() -> None:
     assert len(est.values) + est.support.points_undefined == 2 ** 4
 
 
+def test_a_summed_variable_must_be_supplied_to_the_model_even_though_no_caller_binds_it() -> None:
+    """Scope and footprint are different sets, and treating them as one is a real bug.
+
+    A marginal estimand is indexed by its outcome alone, but evaluating it ranges over the
+    whole ancestral closure. Building the model from the scope leaves the summed variables
+    without domains, and the failure surfaces as a `KeyError` deep inside the evaluator
+    rather than as anything a caller could act on. Named here so a refactor that collapses
+    the two is caught with a message instead of a traceback.
+    """
+    graph = MechanismGraph(
+        variables={"a", "b", "c"},
+        mechanisms={
+            "m1": {"inputs": ("a",), "outputs": ("b",)},
+            "m2": {"inputs": ("b",), "outputs": ("c",)},
+        },
+    )
+    result = identify(graph, DeleteMechanism("m1", outcomes={"c"}))
+    assert isinstance(result, Identified)
+    assert result.expression.scope() == frozenset({"c"})
+    assert result.expression.footprint() == frozenset({"a", "b", "c"})
+
+    records = [
+        {"a": a, "b": b, "c": c}
+        for a, b, c in itertools.product(BINARY, BINARY, BINARY)
+        for _ in range(10)
+    ]
+    est = estimate(
+        result, Dataset.from_records(records), fallbacks={"m1": {(0,): 0.5, (1,): 0.5}}
+    )
+
+    assert set(est.values) == {(0,), (1,)}
+    assert sum(est.values.values()) == pytest.approx(1.0, abs=1e-12)
+
+
 def test_discharged_codes_are_codes_the_compiler_actually_emits() -> None:
     """`DISCHARGEABLE_CODES` is a literal; the set it must match is computed.
 

@@ -335,9 +335,14 @@ def estimate(
     described in `support.failures`.
     """
     identified = _as_identified(result)
+    # Two different sets, and conflating them is a bug the marginal-query work exposed.
+    # `scope` is what the answer is indexed by -- the points that come back in `values`.
+    # `footprint` additionally covers variables the estimand *sums over*, which the model
+    # must still supply domains for even though no caller ever binds them.
     variables = tuple(sorted(identified.expression.scope()))
+    footprint = tuple(sorted(identified.expression.footprint()))
 
-    missing = [name for name in variables if name not in data.variables]
+    missing = [name for name in footprint if name not in data.variables]
     if missing:
         raise UnsupportedEstimand(
             f"The estimand references {missing}, which the dataset does not contain. "
@@ -345,7 +350,7 @@ def estimate(
         )
 
     try:
-        inner = data.model(variables, fallbacks=fallbacks, replacements=replacements)
+        inner = data.model(footprint, fallbacks=fallbacks, replacements=replacements)
     except (DatasetError, SemanticsError) as error:  # pragma: no cover - defensive
         raise UnsupportedEstimand(str(error)) from error
 
@@ -384,6 +389,7 @@ def estimate(
             identified,
             data,
             variables,
+            footprint,
             fallbacks=fallbacks,
             replacements=replacements,
             replicates=bootstrap,
@@ -412,6 +418,7 @@ def _bootstrap_interval(
     identified: Identified,
     data: Dataset,
     variables: tuple[str, ...],
+    footprint: tuple[str, ...],
     *,
     fallbacks: Mapping[str, Mapping[Point, float]] | None,
     replacements: Mapping[str, Mapping[tuple[Point, Point], float]] | None,
@@ -434,7 +441,7 @@ def _bootstrap_interval(
 
     for _ in range(replicates):
         replicate = data.resample(rng)
-        model = replicate.model(variables, fallbacks=fallbacks, replacements=replacements)
+        model = replicate.model(footprint, fallbacks=fallbacks, replacements=replacements)
         for point in points:
             assignment = dict(zip(variables, point, strict=True))
             try:

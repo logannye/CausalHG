@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from causal_hypergraphs.expression import (
+    Expression,
     Fallback,
     Probability,
     Product,
     Quotient,
     ReplacementFactor,
+    SumOut,
 )
 from causal_hypergraphs.graph import MechanismGraph
 
@@ -75,6 +77,137 @@ def _theorem(graph: MechanismGraph, observed: frozenset[str], replacement: bool 
     return "T6"
 
 
+def _validate_outcomes(graph: MechanismGraph, outcomes: tuple[str, ...]) -> None:
+    unknown = tuple(sorted(set(outcomes) - graph.variable_set))
+    if unknown:
+        raise ValueError(
+            f"Query outcomes are not variables of the graph: {list(unknown)}. "
+            "A misspelled readout would otherwise be silently answered as a full-joint query."
+        )
+
+
+def ancestral_closure(graph: MechanismGraph, outcomes: object) -> frozenset[str]:
+    """The variables `outcomes` can depend on: their ancestry in the mechanism graph.
+
+    Walks backwards from each outcome through its producing mechanism, adding that
+    mechanism's whole boundary -- all of `out(m)`, because the chain-rule factor is a
+    *joint* over the outputs and cannot be split, and all of `in(m)`, because the factor
+    conditions on them -- and recurses. Under C4 the producer is unique, so the walk is
+    well defined; under C1 it terminates.
+
+    Everything outside this set is irrelevant to `P(outcomes | do)` and can be dropped
+    rather than summed, which is what makes a marginal query cheap.
+    """
+    wanted = _observed(graph, outcomes) if outcomes else frozenset()
+    producer = {
+        variable: name
+        for name in graph.mechanisms
+        for variable in graph.get_mechanism(name).outputs
+    }
+    needed: set[str] = set()
+    frontier = list(wanted)
+    while frontier:
+        variable = frontier.pop()
+        if variable in needed:
+            continue
+        needed.add(variable)
+        name = producer.get(variable)
+        if name is None:  # exogenous: nothing upstream of it
+            continue
+        mechanism = graph.get_mechanism(name)
+        frontier.extend(set(mechanism.outputs) | set(mechanism.inputs))
+    return frozenset(needed)
+
+
+def _restrict_to_ancestry(
+    expression: Product,
+    graph: MechanismGraph,
+    outcomes: tuple[str, ...],
+) -> tuple[Expression, ProofStep | None]:
+    """Reduce a truncated-factorization product to a marginal query on `outcomes`.
+
+    Exact, by the ordinary ancestral argument: every retained factor is a conditional
+    `P(out(m) | in(m))` that sums to one over `out(m)` at fixed `in(m)`, so summing the
+    full product over the variables outside the ancestral closure collapses each of their
+    factors to one and removes it. No factor outside the closure conditions on a variable
+    inside it -- if it did, that variable would be in the closure -- so the elimination
+    order is unconstrained.
+
+    Only the factored form admits this. The hidden-variable branch is a quotient whose
+    numerator is a single joint over all observed variables; it does not decompose, so
+    the caller marginalizes it without reduction.
+    """
+    if not outcomes:
+        return expression, None
+
+    needed = ancestral_closure(graph, outcomes)
+    retained = [
+        factor for factor in expression.factors if factor.footprint() <= needed
+    ]
+    dropped = len(expression.factors) - len(retained)
+
+    # If the intervention's own factor did not survive, the target mechanism cannot reach
+    # the outcome at all. What remains is the ancestral factorization of the observational
+    # law, which sums to exactly P(outcomes) -- so say that, rather than emitting a sum
+    # over the ancestry that is guaranteed to reproduce it. The footprint drops from the
+    # whole ancestry to the outcomes themselves, and the estimand states outright that the
+    # answer cannot depend on what the intervention installs.
+    intervenes = any(
+        isinstance(factor, Fallback | ReplacementFactor) for factor in retained
+    )
+    if not intervenes:
+        return Probability(outcomes), ProofStep(
+            "Restrict to ancestry",
+            f"The target mechanism is not an ancestor of {','.join(outcomes)}, so its "
+            f"factor is outside the ancestral closure {sorted(needed)} and the "
+            "intervention cannot reach the outcome. The remaining factors are the "
+            f"ancestral factorization of the observational law, which sums to "
+            f"P({','.join(outcomes)}).",
+        )
+
+    summed = tuple(sorted(needed - set(outcomes)))
+    reduced: Expression = Product(retained)
+    if summed:
+        reduced = SumOut(summed, reduced)
+
+    step = ProofStep(
+        "Restrict to ancestry",
+        f"P({','.join(outcomes)} | do) depends only on the ancestral closure "
+        f"{sorted(needed)}. Every factor outside it is a conditional summing to 1, so "
+        f"{dropped} factor(s) were dropped rather than summed; "
+        f"{len(summed)} variable(s) remain to marginalize.",
+    )
+    return reduced, step
+
+
+def _marginalize_quotient(
+    expression: Product,
+    observed: frozenset[str],
+    outcomes: tuple[str, ...],
+) -> tuple[Expression, ProofStep | None]:
+    """Marginalize the hidden-variable estimand to `outcomes`, without reduction.
+
+    The quotient form's numerator is `P(O)`, one joint over every observed variable. It
+    does not factor, so there is no sub-product to keep and no factor to drop: the honest
+    move is to sum over the rest and say so. The answer is correct and the *cost* is
+    unchanged, which is a real limitation rather than a presentational one -- reducing it
+    needs the quotient replaced by a factored identifier, which is the T7 work.
+    """
+    if not outcomes:
+        return expression, None
+
+    summed = tuple(sorted(observed - set(outcomes)))
+    reduced: Expression = SumOut(summed, expression) if summed else expression
+    step = ProofStep(
+        "Restrict to ancestry",
+        f"Marginalized to P({','.join(outcomes)} | do) by summing over {len(summed)} "
+        "variable(s). No factor was dropped: the hidden-variable identifier is a quotient "
+        "whose numerator is a single joint over all observed variables, so it admits no "
+        "ancestral reduction. Evaluation cost is unchanged.",
+    )
+    return reduced, step
+
+
 def _surviving_factors(graph: MechanismGraph, exclude: str) -> list[Probability]:
     """The mechanism-level chain-rule factors of P(V) that survive intervening on `exclude`.
 
@@ -138,6 +271,7 @@ def _identify_delete(
     allow_t7: bool = False,
 ) -> IdentificationResult:
     target = graph.get_mechanism(query.target)
+    _validate_outcomes(graph, query.outcomes)
     observed = _observed(graph, observed_variables)
     missing_boundary = tuple(sorted(target.boundary - observed))
     if missing_boundary:
@@ -173,7 +307,8 @@ def _identify_delete(
         # *omitted* rather than divided out. This keeps the estimand defined where that
         # factor is singular -- the generic case under C2 for a mechanism whose noise carries
         # fewer degrees of freedom than it has outputs.
-        expression = Product([*_surviving_factors(graph, exclude=query.target), *fallbacks])
+        product = Product([*_surviving_factors(graph, exclude=query.target), *fallbacks])
+        expression, restrict_step = _restrict_to_ancestry(product, graph, query.outcomes)
         assumptions = common + (
             Assumption(
                 "Downstream positivity",
@@ -192,7 +327,7 @@ def _identify_delete(
                 f"P0_{query.target}({','.join(target.outputs)}). No division by the target "
                 "factor is performed.",
             ),
-        )
+        ) + ((restrict_step,) if restrict_step else ())
         return Identified(
             expression=expression,
             theorem=theorem,
@@ -209,7 +344,9 @@ def _identify_delete(
     # full-observability branch above does not need.
     numerator = Probability(tuple(sorted(observed)))
     denominator = Probability(target.outputs, given=target.inputs)
-    expression = Product([Quotient(numerator, denominator), *fallbacks])
+    expression, restrict_step = _marginalize_quotient(
+        Product([Quotient(numerator, denominator), *fallbacks]), observed, query.outcomes
+    )
     assumptions = common + (
         Assumption(
             "Target positivity",
@@ -233,7 +370,7 @@ def _identify_delete(
             f"Divide it out of P(O) and multiply by the joint fallback factor "
             f"P0_{query.target}({','.join(target.outputs)}).",
         ),
-    )
+    ) + ((restrict_step,) if restrict_step else ())
     return Identified(
         expression=expression,
         theorem=theorem,
@@ -248,6 +385,7 @@ def _identify_replace(
     observed_variables: object | None,
 ) -> IdentificationResult:
     target = graph.get_mechanism(query.target)
+    _validate_outcomes(graph, query.outcomes)
     observed = _observed(graph, observed_variables)
     missing_boundary = tuple(sorted(target.boundary - observed))
     if missing_boundary:
@@ -297,7 +435,8 @@ def _identify_replace(
         # rather than dividing by it, so the estimand survives a singular target factor.
         # This is the case "replace a stoichiometrically coupled mechanism with a decoupled
         # one", where the replacement puts mass exactly where the old factor vanishes.
-        expression = Product([*_surviving_factors(graph, exclude=query.target), replacement])
+        product = Product([*_surviving_factors(graph, exclude=query.target), replacement])
+        expression, restrict_step = _restrict_to_ancestry(product, graph, query.outcomes)
         assumptions = common + (
             Assumption(
                 "Downstream positivity",
@@ -320,7 +459,7 @@ def _identify_replace(
                 f"product and multiply by P_{query.replacement}. No division by the target "
                 "factor is performed.",
             ),
-        )
+        ) + ((restrict_step,) if restrict_step else ())
         return Identified(
             expression=expression,
             theorem=theorem,
@@ -330,7 +469,9 @@ def _identify_replace(
 
     numerator = Probability(tuple(sorted(observed)))
     denominator = Probability(target.outputs, given=target.inputs)
-    expression = Product([Quotient(numerator, denominator), replacement])
+    expression, restrict_step = _marginalize_quotient(
+        Product([Quotient(numerator, denominator), replacement]), observed, query.outcomes
+    )
     assumptions = common + (
         Assumption(
             "Target positivity",
@@ -347,7 +488,7 @@ def _identify_replace(
             f"P({','.join(target.outputs)} | {','.join(target.inputs)}) is observable.",
         ),
         ProofStep("Swap factor", f"Replace old factor with P_{query.replacement}."),
-    )
+    ) + ((restrict_step,) if restrict_step else ())
     return Identified(
         expression=expression,
         theorem=theorem,
