@@ -85,12 +85,17 @@ def _theorem(
 
 SOLVABILITY = Assumption(
     "Solvability",
-    "The cyclic system has a unique solution for almost every noise draw, so that it "
-    "denotes a distribution at all. Under C1 this is free -- the law is defined by "
-    "sampling in topological order, which is total. Without C1 there is no such "
-    "procedure: the law is the pushforward of the noise through the solution of "
-    "V = F(V, U), which may have none or many. Not checkable from incidence, and this "
-    "compiler never sees F, so it is recorded rather than verified.",
+    "The cyclic system has a unique solution for almost every noise draw. Under C1 this "
+    "is free: the law is defined by sampling in topological order, which is total. "
+    "Without C1 there is no such procedure -- the law is the pushforward of the noise "
+    "through the solution of V = F(V, U), which may have none or many. "
+    "This is not only about the law being well defined. Where solutions fail to exist, "
+    "the data are the SOLVABLE SUBPOPULATION, and solvability is an event that depends on "
+    "the variables: conditioning on it is a selection that biases kernels the cycle "
+    "cannot reach -- including the marginal of an exogenous variable upstream of "
+    "everything. A query whose own closure is acyclic is NOT protected from it. Not "
+    "checkable from incidence, and this compiler never sees F, so it is recorded rather "
+    "than verified, exactly as C2 is.",
 )
 
 

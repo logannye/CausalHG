@@ -148,7 +148,10 @@ sufficient, not necessary: a factor that is summed away integrates to one whatev
 kernel is, so some refused queries are in fact answerable.
 
 An identification on a cyclic graph replaces `C1` with `C1 (local)` and adds `Solvability`,
-which is unverifiable by the compiler in the same way C2 is.
+which is unverifiable by the compiler in the same way C2 is. `Solvability` is not merely
+"the law is well defined": where solutions fail to exist the data are the solvable
+subpopulation, and conditioning on solvability is a selection event that biases kernels
+outside the query's closure, including exogenous marginals.
 
 `d*`-separation, covariate admissibility and the latent projection raise on a cyclic graph
 rather than answering.
