@@ -414,10 +414,27 @@ def _hidden_output_verdict(
     """
     target = graph.get_mechanism(query.target)
 
+    # A hidden output witnesses non-identifiability only if relabelling it is a legal
+    # transformation of a model over this graph. `output_equalities` declares that a
+    # group of outputs are functionally equal, and a group containing an *observed*
+    # member pins the hidden one's labels to it -- the permutation is then no longer
+    # available, and a witness that cannot be constructed does not support the strongest
+    # verdict the library has.
+    pinned = frozenset(
+        name
+        for group in target.output_equalities
+        if set(group) & graph.observed_set
+        for name in group
+    )
     witnessing = tuple(
         variable
         for variable in hidden_outputs
-        if graph.observed_closure((variable,))
+        if graph.observed_closure((variable,)) and variable not in pinned
+    )
+    withdrawn = tuple(
+        variable
+        for variable in hidden_outputs
+        if graph.observed_closure((variable,)) and variable in pinned
     )
     reached = tuple(sorted(graph.observed_closure(witnessing)))
     moved = tuple(sorted(graph.observed_closure(target.outputs)))
@@ -457,6 +474,32 @@ def _hidden_output_verdict(
                     "Relabelling witness",
                     "A permutation of the hidden output is a symmetry of the observed law "
                     "and not of the intervention policy.",
+                ),
+            ),
+        )
+
+    if withdrawn:
+        return Unknown(
+            reason=(
+                f"{list(withdrawn)} are hidden outputs of {query.target!r} that reach an "
+                "observation, but they are declared functionally equal to an observed "
+                "output, which pins their labels. The relabelling argument that refutes "
+                "identifiability elsewhere is unavailable here, and this compiler has no "
+                "other route, so the case is open rather than settled."
+            ),
+            next_algorithm="Identification under declared determinism.",
+            suggestions=(
+                f"Drop the equality group over {list(withdrawn)} if it was declared "
+                "loosely; it is what makes this case neither refutable nor identified.",
+            ),
+            missing_variables=withdrawn,
+            assumptions=CORE_T7_ASSUMPTIONS,
+            derivation=(
+                boundary_step,
+                ProofStep(
+                    "Witness check",
+                    f"Relabelling {list(withdrawn)} is blocked by the declared equality "
+                    f"group(s) {[list(g) for g in target.output_equalities]}.",
                 ),
             ),
         )

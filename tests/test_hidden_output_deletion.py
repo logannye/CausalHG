@@ -235,3 +235,56 @@ def test_a_hidden_output_reaching_nothing_still_needs_its_siblings_checked() -> 
 
     assert isinstance(result, Identified), result
     assert str(result.expression) == "P(Y)"
+
+
+def test_a_declared_equality_pins_the_labels_and_withdraws_the_witness() -> None:
+    """`Unidentified` is the strongest verdict available, so its witness has to hold.
+
+    The relabelling argument permutes a hidden variable's values. `output_equalities`
+    declares that a mechanism's outputs are functionally equal, and when the group contains
+    an *observed* member the hidden one's labels are pinned to it -- the permutation is no
+    longer a transformation of a model compatible with the same graph, so it witnesses
+    nothing.
+
+    Five of the twenty-eight relabelling verdicts over 300 generated models are of this
+    shape, so the guard is not hypothetical. The honest fallback is `Unknown`: this
+    compiler does not settle the case, which is a different claim from "no formula exists".
+    """
+    graph = MechanismGraph(
+        variables={"h", "C", "Y"},
+        mechanisms={
+            "m1": {
+                "inputs": (),
+                "outputs": ("C", "h"),
+                "output_equalities": (("C", "h"),),
+            },
+            "m2": {"inputs": ("h",), "outputs": ("Y",)},
+        },
+        observed_variables={"C", "Y"},
+    )
+    result = identify(graph, DeleteMechanism("m1", outcomes={"Y"}), allow_t7=True)
+
+    assert not isinstance(result, Unidentified), (
+        "the declared equality C = h pins h's labels, so relabelling witnesses nothing"
+    )
+    assert "equal" in getattr(result, "reason", "").lower(), result
+
+
+def test_an_all_hidden_equality_group_leaves_the_witness_standing() -> None:
+    """Declaring two *hidden* outputs equal pins them to each other and to nothing
+    observed, so relabelling the pair together is still a symmetry of the data."""
+    graph = MechanismGraph(
+        variables={"h1", "h2", "Y"},
+        mechanisms={
+            "m1": {
+                "inputs": (),
+                "outputs": ("h1", "h2"),
+                "output_equalities": (("h1", "h2"),),
+            },
+            "m2": {"inputs": ("h1",), "outputs": ("Y",)},
+        },
+        observed_variables={"Y"},
+    )
+    result = identify(graph, DeleteMechanism("m1", outcomes={"Y"}), allow_t7=True)
+
+    assert isinstance(result, Unidentified), result

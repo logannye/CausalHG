@@ -97,8 +97,12 @@ contains:
 - `Probability(variables, given=...)` for observational kernels.
 - `MechanismFactor(name, variables, given=...)` for named mechanism kernels.
 - `ReplacementFactor(name, variables, given=...)` for replacement kernels.
-- `Fallback(mechanism, variables)` for the joint deletion policy `P0^m(out(m))`. One
-  factor over all of the deleted mechanism's outputs, not one per variable.
+- `Fallback(mechanism, variables, marginalized=())` for the joint deletion policy
+  `P0^m(out(m))`. One factor over all of the deleted mechanism's outputs, not one per
+  variable. `marginalized` names outputs summed out of the declared table *inside* the
+  node, so they are neither free nor bound and require a domain from nobody -- the sum
+  runs over the table's own keys. That is how a mechanism may have a hidden output that
+  no observable depends on.
 - `ConditionalExpectation(target, given=...)` for `E[target | given]`. The target is
   integrated inside the node, so it is neither free nor bound and its domain is never
   enumerated — which is what allows it to be continuous.

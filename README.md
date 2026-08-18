@@ -84,6 +84,35 @@ The estimand is an AST, not a string. It renders to text and LaTeX, exposes its
 scope and the primitive kernels it references, and has a canonical key for
 comparison.
 
+### Three outcomes, and the difference between them is the point
+
+`Identified` carries a formula. `Unknown` says this compiler cannot do it and what would
+help. `Unidentified` says **no formula exists** — a much stronger claim, so it comes with a
+witness.
+
+Deleting a mechanism whose output is never observed is the case that separates them.
+`P0^m(out(m))` is a policy over the *values* of the outputs, and relabelling a hidden
+variable preserves every observed distribution while moving a policy defined on its
+labels — so two models can agree on everything measurable and disagree on the answer:
+
+```python
+identify(graph, DeleteMechanism("m_h", outcomes={"Y"}), allow_t7=True)
+# Unidentified: relabelling ['h'] leaves every observed distribution unchanged and
+#               changes the policy, so no formula in the observed law can answer this.
+# witness.hidden_outputs        ('h',)
+# witness.observed_descendants  ('Y',)
+```
+
+If that hidden output reaches *nothing* observed, the verdict flips completely: the caller
+declared the policy over every output, so its marginal over the observed ones is a sum over
+a table already in hand, and the query is identified. One consumer of the hidden variable
+is the whole difference.
+
+The witness has a stated limit rather than a hidden one. It needs the policy to
+distinguish the labels it permutes, so a permutation-invariant policy escapes it, and a
+declared `output_equalities` group containing an observed variable pins the labels and
+withdraws it — in which case the verdict falls back to `Unknown`.
+
 ### Refusal is a first-class outcome
 
 The compiler will not return a plausible-looking formula it cannot justify. Declaring
@@ -393,6 +422,12 @@ theorem, its assumptions, and its derivation attached.
   no joint over the estimand's footprint is ever assembled.
 - `d*`-separation on the bipartite blowup with equality-based determination closure,
   by Bayes-Ball reachability in `O(V + E)`.
+- Latent projection to a Pearl ADMG, checked against the library's own Proposition T4.0:
+  a mechanism has one shared noise, so its outputs are a bidirected clique and the
+  districts are exactly `{out(m)}`.
+- A verdict for every hidden *output* of a deleted mechanism. One that reaches an
+  observation is `Unidentified` with a relabelling witness; one that reaches nothing is
+  summed out of the declared policy, which identifies it.
 - A deliberately isolated Pearl-ID backend (observational marginals, Markovian
   truncated factorization, the canonical front-door pattern) and an opt-in `T7`
   front-door slice via `identify(..., allow_t7=True)`.
@@ -401,8 +436,16 @@ theorem, its assumptions, and its derivation attached.
 
 ## Not yet supported
 
-- Complete `T7` Pearl-ID reduction. The opt-in slice handles single-output mechanism
-  deletion only — which is the Pearl-degenerate case, not the hypergraph one.
+- Complete `T7` Pearl-ID reduction, for the case where a *hidden input* leaves the
+  target's boundary unobserved. That is 28 of the 143 hidden-boundary mechanisms across
+  300 generated models; the other 115 are hidden *outputs*, which are now settled without
+  it. The Pearl backend behind it is still the three-case stub (observational marginal,
+  Markovian truncation, canonical front door), so a real Shpitser-Pearl ID is the
+  remaining piece.
+- `replace(m, m')` under a hidden boundary. Deletion installs an unconditional policy, so
+  `P(Y | delete m) = Σ P0(x) · P(Y | do(out(m) = x))`. A replacement kernel *reads*
+  `in(m)`, so that identity does not apply and the reduction needs the joint
+  `P(Y, in(m) | do(out(m)))`. Refused rather than approximated by the deletion identity.
 - Hyper-hedge completeness. Open conjecture.
 - Complete Pearl-ID beyond the currently implemented backend cases.
 - Markov-kernel mechanisms; richer role typing (substrate / enzyme / product);
@@ -491,7 +534,7 @@ python -m pyright
 src/causal_hypergraphs/
   graph/            typed incidence and validation
   expression/       probability expression algebra
-  identification/   T2/T3/T4/T6 compilers, Pearl-ID backend, T7 track
+  identification/   T2/T3/T4/T6 compilers, latent projection, Pearl-ID backend, T7 track
   separation/       d*-separation and determination closure
   semantics/        finite-discrete evaluation: enumeration and variable elimination
   estimation/       datasets, factored empirical model, estimation, certificate discharge
