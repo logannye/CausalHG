@@ -43,8 +43,8 @@ P(V) = prod_{v exogenous} P(v) * prod_{m} P(out(m) | in(m))
 and a mechanism intervention is a **local factor swap** — delete one factor and put
 something else in its place. Two operations are supported:
 
-- `delete(m)` — remove the mechanism; its orphaned outputs fall back to declared
-  laws `P0(v)`.
+- `delete(m)` — remove the mechanism; its orphaned outputs fall back to a declared
+  joint policy `P0^m(out(m))`.
 - `replace(m, m')` — keep the wiring, change the function. Requires
   `rho(m') = rho(m)`: same inputs, same outputs.
 
@@ -73,7 +73,7 @@ result = identify(graph, DeleteMechanism("m1"))
 
 if isinstance(result, Identified):
     print(result.theorem)      # T2
-    print(result.expression)   # P(A) * P(B) * P(E) * P(F | C,E) * P0(C) * P0(D)
+    print(result.expression)   # P(A) * P(B) * P(E) * P(F | C,E) * P0_m1(C,D)
     for assumption in result.assumptions:
         print(assumption.code) # C1 C2 C3 C4 P0 Observed boundary Downstream positivity
     for step in result.derivation:
@@ -97,7 +97,7 @@ graph = MechanismGraph(
         "m1": {"inputs": {"A", "B"}, "outputs": {"C", "D"}},
         "m2": {"inputs": {"C", "E"}, "outputs": {"F"}},
     },
-    fallback_variables={"A", "B", "E", "F"},   # no P0 for C or D
+    fallback_variables={"A", "B", "E", "F"},   # no P0 policy covering C or D
 )
 
 result = identify(graph, DeleteMechanism("m1"))
@@ -106,7 +106,8 @@ result.status              # 'unknown'
 result.reason              # 'Mechanism deletion would orphan outputs without a
                            #  declared fallback policy.'
 result.missing_variables   # ('C', 'D')
-result.suggestions[0]      # 'Declare fallback distribution P0(C).'
+result.suggestions[0]      # 'Declare the joint fallback policy P0_m1(C,D) over
+                           #  the orphaned outputs.'
 ```
 
 Three outcomes exist: `Identified`, `Unknown` (this compiler cannot do it, and here
@@ -223,13 +224,9 @@ theorem, its assumptions, and its derivation attached.
 - Complete Pearl-ID beyond the currently implemented backend cases.
 - Cyclic mechanism graphs; Markov-kernel mechanisms; richer role typing
   (substrate / enzyme / product); mechanism-correlated noise.
-- **Joint fallback kernels.** `P0` is a product of per-variable laws, so `delete(m)`
-  necessarily renders `out(m)` mutually independent, and a post-deletion law that
-  preserves coupling among the orphaned outputs cannot be expressed. The
-  generalization to `P0^m(out(m))` is stated in `THEOREM_T2_T3.md` Remark T3.3 and
-  every result goes through with it.
-- Estimators. The discrete semantics evaluates an estimand against a model you
-  supply; nothing estimates the primitive kernels from samples.
+- Estimators for continuous or high-dimensional data. `estimate` handles finite
+  discrete variables; continuous readouts must be binned first, and binning is a
+  modelling choice that can create or destroy the positivity being checked.
 
 ## Status and known gaps
 

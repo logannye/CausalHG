@@ -22,7 +22,9 @@ G = (V, M, in, out, V_obs, V_hidden, F0)
 - `boundary(m) = in(m) union out(m)`.
 - `V_obs` is the set of observed variables.
 - `V_hidden = V \ V_obs`.
-- `F0` is the set of variables with declared fallback distributions `P0(v)`.
+- `F0` is the set of variables covered by a declared fallback policy. The policy
+  itself is per-mechanism and joint: `P0^m(out(m))`, one kernel over all of `m`'s
+  outputs, not a product of per-variable laws.
 
 The compiler treats mechanisms as named causal objects. Structural functions and
 noise samplers may be attached by examples, but identification must depend only
@@ -45,16 +47,24 @@ incidence alone.
 
 ### Mechanism Deletion
 
-`DeleteMechanism(m)` denotes replacing mechanism `m` with fallback distributions
-for its outputs:
+`DeleteMechanism(m)` denotes replacing mechanism `m` with a fallback policy over
+its outputs:
 
 ```text
-delete(m): remove P(out(m) | in(m)), insert product_{v in out(m)} P0(v)
+delete(m): remove P(out(m) | in(m)), insert P0^m(out(m))
 ```
 
-Deletion is not defined unless every output in `out(m)` has a declared fallback
-policy. If any output lacks `P0(v)`, the compiler returns `Unknown` with the
-missing output variables.
+`P0^m` is a single joint kernel over `out(m)`. It is deliberately not a product of
+per-variable laws: deletion orphans all of `m`'s outputs simultaneously, and a product
+would force them independent, which rules out removing a mechanism whose outputs stay
+coupled afterwards. A product policy remains expressible as a joint kernel that happens
+to factorize, so nothing is lost. `P0^m` does not condition on `in(m)` -- deletion
+removes the mechanism, so its inputs no longer act; a policy that still reads the inputs
+is a replacement, not a deletion.
+
+Deletion is not defined unless every output in `out(m)` is covered by a declared
+fallback policy. Otherwise the compiler returns `Unknown` with the missing output
+variables.
 
 ### Mechanism Replacement
 
@@ -148,7 +158,7 @@ If all variables are observed and no mechanism is marked latent:
 P(V | delete(m)) =
   product_{v exogenous} P(v)
   * product_{m' != m} P(out(m') | in(m'))
-  * product_{v in out(m)} P0(v)
+  * P0^m(out(m))
 ```
 
 The result theorem is `T2`. Every factor is an observational quantity because
@@ -194,10 +204,10 @@ P(O) = P(out(m) | in(m)) * R(O),
   where R(O) = sum_H product_{m' != m} P(out(m') | in(m')) * product_exo P(v)
 ```
 
-Since `P0` and the replacement factor also do not depend on `H`:
+Since `P0^m` and the replacement factor also do not depend on `H`:
 
 ```text
-P(O | delete(m))          = R(O) * product_{v in out(m)} P0(v)
+P(O | delete(m))          = R(O) * P0^m(out(m))
 P(O | replace(m, m'))     = R(O) * P_m_prime(out(m) | in(m))
 ```
 
@@ -247,7 +257,7 @@ For this supported case, deletion of the target mechanism is compiled as a
 stochastic intervention on its output:
 
 ```text
-P(Y | delete(m_x)) = sum_x P0(x) * P(Y | do(x))
+P(Y | delete(m_x)) = sum_x P0^m_x(x) * P(Y | do(x))
 ```
 
 The Pearl backend must identify `P(Y | do(x))`; otherwise the mechanism compiler

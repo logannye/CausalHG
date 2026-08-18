@@ -79,7 +79,13 @@ class RandomModel:
     mechanisms: tuple[MechanismSpec, ...]
     exogenous_laws: Mapping[str, Mapping[int, float]]
     kernels: Mapping[str, Kernel]
-    fallbacks: Mapping[str, Mapping[int, float]]
+    fallbacks: Mapping[str, Mapping[Point, float]]
+    """Joint deletion policies ``P0^m(out(m))``, keyed by mechanism then by output tuple.
+
+    Deliberately *not* per-variable: a product policy forces the orphaned outputs
+    independent, which is the case the framework used to be unable to state. Some of these
+    are generated non-factorizing on purpose -- see `non_factorizing_fallbacks`.
+    """
     replacements: Mapping[str, Kernel]
 
     # -- structure -------------------------------------------------------------
@@ -141,15 +147,41 @@ class RandomModel:
         }
 
     def interventional_delete(self, target: str) -> dict[Point, float]:
-        """P(V | delete(target)): the target factor becomes the product of fallbacks."""
+        """P(V | delete(target)): the target factor becomes the joint fallback policy."""
         spec = self.spec(target)
+        table = self.fallbacks[target]
         result: dict[Point, float] = {}
         for x in self.assignments():
-            fallback = 1.0
-            for v in spec.outputs:
-                fallback *= self.fallbacks[v][x[v]]
+            fallback = table[tuple(x[v] for v in sorted(spec.outputs))]
             result[tuple(x[v] for v in self.variables)] = self._law(x, {target: fallback})
         return result
+
+    def non_factorizing_fallbacks(self) -> tuple[str, ...]:
+        """Mechanisms whose deletion policy is not a product of its own marginals.
+
+        A sweep that only ever saw product policies would pass just as well against the
+        old per-variable type, so it could not detect a regression to it.
+        """
+        found: list[str] = []
+        for spec in self.mechanisms:
+            if len(spec.outputs) < 2:
+                continue
+            table = self.fallbacks[spec.name]
+            marginals = [
+                {
+                    value: sum(p for point, p in table.items() if point[position] == value)
+                    for value in BINARY
+                }
+                for position in range(len(spec.outputs))
+            ]
+            for point, probability in table.items():
+                product = 1.0
+                for position, value in enumerate(point):
+                    product *= marginals[position][value]
+                if abs(probability - product) > 1e-9:
+                    found.append(spec.name)
+                    break
+        return tuple(found)
 
     def interventional_replace(self, target: str) -> dict[Point, float]:
         """P(V | replace(target, target')) using the generated replacement kernel."""
@@ -200,6 +232,24 @@ def _distribution(rng: random.Random, support: Sequence[Point]) -> dict[Point, f
 def _scalar_law(rng: random.Random) -> dict[int, float]:
     p = rng.uniform(0.2, 0.8)
     return {0: 1.0 - p, 1: p}
+
+
+def _fallback_policy(rng: random.Random, outputs: tuple[str, ...]) -> dict[Point, float]:
+    """A joint deletion policy ``P0^m(out(m))`` over the outputs' value tuples.
+
+    For a multi-output mechanism this draws either a free joint (generically
+    non-factorizing) or a diagonal one supported on all-equal tuples -- the discrete image
+    of coupling that survives the mechanism's removal. Both are unreachable by a product
+    of per-variable laws, which is the point.
+    """
+    points = list(itertools.product(*(BINARY for _ in outputs)))
+    if len(outputs) > 1 and rng.random() < 0.3:
+        points = [point for point in points if len(set(point)) == 1]
+    weights = {point: rng.uniform(MIN_WEIGHT, 1.0) for point in points}
+    total = sum(weights.values())
+    full = dict.fromkeys(itertools.product(*(BINARY for _ in outputs)), 0.0)
+    full.update({point: weight / total for point, weight in weights.items()})
+    return full
 
 
 def _kernel(
@@ -307,7 +357,7 @@ def generate_model(
         kernels={
             spec.name: _kernel(rng, spec.inputs, spec.outputs, spec.shape) for spec in specs
         },
-        fallbacks={v: _scalar_law(rng) for v in variables},
+        fallbacks={spec.name: _fallback_policy(rng, spec.outputs) for spec in specs},
         replacements={
             spec.name: _kernel(rng, spec.inputs, spec.outputs, "positive") for spec in specs
         },

@@ -277,6 +277,16 @@ class HypergraphSCM:
         )
 
     def do_delete_mechanism(self, mechanism_name: str) -> "HypergraphSCM":
+        """Delete a mechanism, orphaning its outputs to their fallback samplers.
+
+        Scope note: `FOUNDATIONS.md` §6 defines the fallback policy as a per-mechanism
+        *joint* law `P_0^m` over `out(m)`. This simulator draws each orphaned variable
+        from its own sampler in `exogenous`, so it realizes only the factorizing special
+        case -- the orphaned outputs come out independent. That is a restriction of this
+        reference implementation, not of the formalism; the identification compiler in
+        `src/causal_hypergraphs` carries the general joint policy. Simulating a coupled
+        deletion here would need a per-mechanism joint sampler.
+        """
         new_mechs = tuple(m for m in self.mechanisms if m.name != mechanism_name)
         new_scm = HypergraphSCM(
             variables=self.variables,

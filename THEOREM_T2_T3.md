@@ -38,18 +38,18 @@ The mechanism-level chain rule is the principal new factorization tool. It gener
 
 ## 2. Theorem T2: mechanism-deletion truncation
 
-**Theorem T2 (kernel form).** Under v1 conventions and causal sufficiency, for any $m^\star \in E$ with fallback $P_0$ on the orphaned outputs $\mathrm{out}(m^\star)$:
+**Theorem T2 (kernel form).** Under v1 conventions and causal sufficiency, for any $m^\star \in E$ with fallback policy $P_0^{m^\star}$ on the orphaned outputs $\mathrm{out}(m^\star)$:
 
 $$
-P^{\mathcal{M}^{\neg m^\star}}(V) \;=\; \left[\prod_{v \in V^{\mathrm{exo}}} P(v)\right] \cdot \left[\prod_{m \in E \setminus \{m^\star\}} P\!\left(\mathrm{out}(m) \mid \mathrm{in}(m)\right)\right] \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v).
+P^{\mathcal{M}^{\neg m^\star}}(V) \;=\; \left[\prod_{v \in V^{\mathrm{exo}}} P(v)\right] \cdot \left[\prod_{m \in E \setminus \{m^\star\}} P\!\left(\mathrm{out}(m) \mid \mathrm{in}(m)\right)\right] \cdot P_0^{m^\star}\!\left(\mathrm{out}(m^\star)\right).
 $$
 
-*Proof.* By Lemma 1.1, $P^{\mathcal{M}}(V)$ has factor $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ for $m^\star$. Deleting $m^\star$ removes this factor from the chain-rule product. Under C4, every $v \in \mathrm{out}(m^\star)$ has no other producer, hence becomes orphaned and acquires the $P_0$ factor. The remaining factors are unchanged, so Lemma 1.1 applied to $\mathcal{M}^{\neg m^\star}$ gives the display above. $\square$
+*Proof.* By Lemma 1.1, $P^{\mathcal{M}}(V)$ has factor $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ for $m^\star$. Deleting $m^\star$ removes this factor from the chain-rule product. Under C4, every $v \in \mathrm{out}(m^\star)$ has no other producer, hence becomes orphaned; the whole set $\mathrm{out}(m^\star)$ acquires the single joint factor $P_0^{m^\star}$. The remaining factors are unchanged, so Lemma 1.1 applied to $\mathcal{M}^{\neg m^\star}$ gives the display above. $\square$
 
 **Corollary T2.1 (quotient form).** If additionally $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)) > 0$ holds $P^{\mathcal{M}^{\neg m^\star}}$-almost everywhere, then
 
 $$
-P^{\mathcal{M}^{\neg m^\star}}(V) \;=\; \frac{P^{\mathcal{M}}(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v).
+P^{\mathcal{M}^{\neg m^\star}}(V) \;=\; \frac{P^{\mathcal{M}}(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot P_0^{m^\star}\!\left(\mathrm{out}(m^\star)\right).
 $$
 
 *Proof.* Multiply and divide the kernel form by $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ — legitimate exactly on the region where that factor is nonzero — and apply Lemma 1.1 in reverse. $\square$
@@ -58,9 +58,9 @@ $$
 
 C2 posits deterministic structural functions driven by exogenous noise. When $u_{m^\star}$ carries fewer degrees of freedom than $|\mathrm{out}(m^\star)|$ — which is what stoichiometric coupling *is* — the mechanism factor is singular, supported on a proper subset of $\mathrm{Dom}(\mathrm{out}(m^\star))$. Deleting $m^\star$ replaces that factor by one with full support, so $P^{\mathcal{M}^{\neg m^\star}}$ puts mass exactly where $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ vanishes. On that region the quotient is $0/0$, while the kernel form is defined and correct.
 
-This is not a measure-theoretic technicality about continuous densities: it is already visible in a two-state discrete model. Take $\mathrm{out}(m^\star) = \{C, D\}$ binary with $C \equiv D$, and $P_0(C), P_0(D)$ of full support. Then $P(C \neq D \mid A,B) = 0$ while $P^{\neg m^\star}(C \neq D) > 0$.
+This is not a measure-theoretic technicality about continuous densities: it is already visible in a two-state discrete model. Take $\mathrm{out}(m^\star) = \{C, D\}$ binary with $C \equiv D$, and $P_0^{m^\star}$ of full support. Then $P(C \neq D \mid A,B) = 0$ while $P^{\neg m^\star}(C \neq D) > 0$.
 
-§5 below carries the continuous instance of the same fact, and states it outright: the worked example's mechanism factor is "singular with respect to Lebesgue measure on $\mathbb{R}^2$". The example nonetheless reaches the right answer under the quotient form only because it takes $P_0 = \delta_0 \otimes \delta_0$, which is supported on the diagonal $C = D$ where the singular factor lives. A fallback with any off-diagonal mass breaks it.
+§5 below carries the continuous instance of the same fact, and states it outright: the worked example's mechanism factor is "singular with respect to Lebesgue measure on $\mathbb{R}^2$". The example nonetheless reaches the right answer under the quotient form only because it takes $P_0^{m_1} = \delta_0 \otimes \delta_0$, which is supported on the diagonal $C = D$ where the singular factor lives. A fallback with any off-diagonal mass breaks it.
 
 Accordingly, the compiler emits the kernel form whenever every chain-rule factor is observational, and falls back to the quotient only where hidden variables leave no alternative (T6), recording `Target positivity` explicitly when it does.
 
@@ -86,13 +86,20 @@ $$
 
 Remark T2.2 applies verbatim, and bites harder here: $\rho(m') = \rho(m^\star)$ constrains incidence, not behaviour, so replacing a coupled mechanism with a decoupled one is a legal query — "what if this complex were two independent enzymes?" — and it is exactly a query whose new mass lands where the old factor vanishes.
 
-**Corollary T3.2 (deletion as replacement).** $\mathrm{do}(\neg m^\star)$ is the special case of $\mathrm{do}(m^\star \to m')$ where $m'$ is the *trivial mechanism* whose conditional distribution equals $\prod_{v \in \mathrm{out}(m^\star)} P_0(v)$, independent of inputs.
+**Corollary T3.2 (deletion as replacement).** $\mathrm{do}(\neg m^\star)$ is the special case of $\mathrm{do}(m^\star \to m')$ where $m'$ is the *trivial mechanism* whose conditional distribution equals $P_0^{m^\star}(\mathrm{out}(m^\star))$, independent of inputs.
 
 This unifies the two new operations: deletion is the "set this mechanism to its $P_0$-default" form of replacement.
 
-**Remark T3.3 (the product form of $P_0$ is a modelling restriction, not a theorem).** Corollary T3.2 exposes a v1 limitation worth naming, because it is invisible in the worked example. Deletion is defined as replacement by a factor that is a *product* of per-variable fallbacks, so $\mathrm{do}(\neg m^\star)$ necessarily renders $\mathrm{out}(m^\star)$ mutually independent. A framework whose stated motivation is that jointly produced outputs are structurally coupled therefore cannot express a post-deletion law that preserves any coupling — for instance a knocked-out reaction whose products still satisfy a conservation constraint imposed by something other than $m^\star$.
+**Remark T3.3 (why $P_0$ is joint, and what the product form silently asserted).** Corollary T3.2 makes the type of $P_0$ visible. An earlier version of this document defined deletion as replacement by a *product* of per-variable fallbacks, $\prod_{v \in \mathrm{out}(m^\star)} P_0(v)$. That is not a neutral choice of notation: it makes $\mathrm{do}(\neg m^\star)$ render $\mathrm{out}(m^\star)$ mutually independent as a matter of definition. A framework whose stated motivation is that jointly produced outputs are structurally coupled could then not express a post-deletion law preserving any coupling — for instance a knocked-out reaction whose products still satisfy a conservation constraint imposed by something other than $m^\star$. The restriction was invisible in the worked example of §5 precisely because that example's fallback, $\delta_0 \otimes \delta_0$, happens to factorize.
 
-Nothing in Lemma 1.1 or T2 requires this. The natural generalization is a per-mechanism joint fallback kernel $P_0^{m^\star}(\mathrm{out}(m^\star))$, of which $\prod_v P_0(v)$ is the independent special case; every statement above goes through with $\prod_{v} P_0(v)$ replaced by $P_0^{m^\star}$. v1 keeps the product form, and the restriction is recorded here rather than left implicit.
+Nothing in Lemma 1.1 or T2 requires it. The proofs use only that the inserted factor is a fixed kernel over $\mathrm{out}(m^\star)$ not depending on the rest of the model; whether it factorizes is never invoked. Accordingly $P_0^{m^\star}(\mathrm{out}(m^\star))$ is a single joint kernel throughout this document, and $\prod_v P_0(v)$ is recovered as its independent special case, so no previously expressible model is lost.
+
+Two type distinctions are worth stating explicitly, since both were blurred by the product form:
+
+- $P_0^{m^\star}$ carries **no conditioning on $\mathrm{in}(m^\star)$**. Deletion removes the mechanism, so its inputs no longer act. A policy that still reads the inputs is $\mathrm{do}(m^\star \to m')$, not $\mathrm{do}(\neg m^\star)$, and belongs to T3.
+- $P_0^{m^\star}$ is indexed by the **mechanism**, not by its output set. Under C4 the two are in bijection, so this costs nothing; it is what keeps the policy attached to the intervention that installs it.
+
+This is a strictly weaker hypothesis than the one it replaces, so every theorem in this document, in `THEOREM_T4_T5.md`, and in `THEOREM_H1_PLUS.md` holds verbatim.
 
 ---
 
@@ -146,7 +153,7 @@ $$
 
 — a degenerate bivariate Gaussian supported on the line $C = D$, with variance $\sigma_1^2$ along that line. The degeneracy is the formal expression of joint structure: $P(C, D \mid A, B)$ does not factor as $P(C \mid A, B) \cdot P(D \mid A, B)$, and is in fact singular with respect to Lebesgue measure on $\mathbb{R}^2$.
 
-Apply T2 with $P_0(C) = P_0(D) = \delta_0$:
+Apply T2 with $P_0^{m_1} = \delta_0 \otimes \delta_0$:
 
 $$
 P^{\neg m_1}(V) = \frac{P(V)}{P(C, D \mid A, B)} \cdot \delta_0(C) \delta_0(D) = P(A) P(B) P(E) \cdot \delta_0(C) \delta_0(D) \cdot P(F \mid C, E).
@@ -166,9 +173,9 @@ This matches direct simulation of $\mathcal{M}^{\neg m_1}$ exactly, confirming T
 
 ## 7. Why mechanism-level interventions admit a closed-form identifier
 
-A subtle but important point. Pearl's $\mathrm{do}(\neg m_1)$-equivalent intervention is the *stochastic multi-variable* intervention $\mathrm{do}(C \sim P_0, D \sim P_0)$, with $(C, D)$ jointly resampled from $\prod P_0$. In Pearl ADMGs, identifying multi-variable stochastic interventions reduces to standard multi-variable ID with a substitution step (Bareinboim-Pearl 2016) and is in general case-analytic — the ID algorithm runs, may invoke the do-calculus rules in non-trivial sequences, and (in the worst case) returns a hedge.
+A subtle but important point. Pearl's $\mathrm{do}(\neg m_1)$-equivalent intervention is the *stochastic multi-variable* intervention $\mathrm{do}(C \sim P_0, D \sim P_0)$, with $(C, D)$ jointly resampled from $P_0^{m_1}$. In Pearl ADMGs, identifying multi-variable stochastic interventions reduces to standard multi-variable ID with a substitution step (Bareinboim-Pearl 2016) and is in general case-analytic — the ID algorithm runs, may invoke the do-calculus rules in non-trivial sequences, and (in the worst case) returns a hedge.
 
-The hypergraph framework, by contrast, treats $\mathrm{do}(\neg m_1)$ as a *single* operation and gives it a **closed-form identifier** read directly from Lemma 1.1's factorization: $P(V) / P(\mathrm{out}(m_1) \mid \mathrm{in}(m_1)) \cdot \prod_{v \in \mathrm{out}(m_1)} P_0(v)$. No algorithmic search, no case analysis, no hedge check — the formula is uniform in the structure of $\mathcal{M}$.
+The hypergraph framework, by contrast, treats $\mathrm{do}(\neg m_1)$ as a *single* operation and gives it a **closed-form identifier** read directly from Lemma 1.1's factorization: $P(V) / P(\mathrm{out}(m_1) \mid \mathrm{in}(m_1)) \cdot P_0^{m_1}(\mathrm{out}(m_1))$. No algorithmic search, no case analysis, no hedge check — the formula is uniform in the structure of $\mathcal{M}$.
 
 This is the framework's substantive theoretical contribution at the level of identifiability: **first-class addressability of mechanisms collapses a multi-variable case-analytic ID problem into a single closed-form expression.** Whether this collapse also extends the *class* of identifiable queries — a stronger claim — depends on the setting. Under v1 conventions with $V^{\mathrm{lat}} = \emptyset$, we believe both formalisms reach the same identifiability verdicts in concrete cases (see `THEOREM_T4_T5.md` §3 for the precise observation). Under hidden variables, T6's observed-boundary closed form does in concrete cases bypass hyper-hedge analysis that Pearl's ID would otherwise require.
 

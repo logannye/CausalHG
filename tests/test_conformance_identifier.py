@@ -62,6 +62,7 @@ def sweep() -> dict[str, int]:
         "skipped_positivity": 0,
         "refused": 0,
         "hidden_variable_models": 0,
+        "non_factorizing_deletions": 0,
     }
     failures: list[str] = []
 
@@ -70,6 +71,7 @@ def sweep() -> dict[str, int]:
         graph = model.graph()
         if len(model.observed) < len(model.variables):
             tally["hidden_variable_models"] += 1
+        tally["non_factorizing_deletions"] += len(model.non_factorizing_fallbacks())
 
         for spec in model.mechanisms:
             cases = (
@@ -138,3 +140,14 @@ def test_the_sweep_exercises_the_hard_paths(sweep) -> None:
     """Coverage of the regimes where the two known defects actually lived."""
     assert sweep["hidden_variable_models"] >= 20, sweep
     assert sweep["refused"] >= 1, sweep
+
+
+def test_the_sweep_exercises_non_factorizing_deletion_policies(sweep) -> None:
+    """`P0` is joint, and the sweep must be able to tell.
+
+    A deletion policy that happens to factorize is reproduced just as well by a product of
+    per-variable fallbacks, so a sweep containing only those would pass against the type
+    this generalization replaced -- it could not detect a regression. These are policies no
+    product form can express, so they make the joint type load-bearing here.
+    """
+    assert sweep["non_factorizing_deletions"] >= 50, sweep

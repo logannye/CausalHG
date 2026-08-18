@@ -354,9 +354,9 @@ def identify_delete_via_t7(
     if missing_fallback:
         return Unknown(
             reason="Mechanism deletion would orphan outputs without a declared fallback policy.",
-            suggestions=tuple(
-                f"Declare fallback distribution P0({variable})."
-                for variable in missing_fallback
+            suggestions=(
+                f"Declare the joint fallback policy P0_{query.target}"
+                f"({','.join(missing_fallback)}) over the orphaned outputs.",
             ),
             missing_variables=missing_fallback,
         )
@@ -389,7 +389,10 @@ def identify_delete_via_t7(
         )
 
     target_output = target.outputs[0]
-    expression = SumOut(target.outputs, Product([Fallback(target_output), pearl_result.expression]))
+    expression = SumOut(
+        target.outputs,
+        Product([Fallback(query.target, target.outputs), pearl_result.expression]),
+    )
     return Identified(
         expression=expression,
         theorem="T7",

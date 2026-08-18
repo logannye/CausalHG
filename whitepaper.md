@@ -36,7 +36,7 @@ Three results form the technical core:
 
 - **A graphical Markov property** (Theorem T1). A bipartite-blowup construction lifts Pearl's d-separation, with a deterministic-relations augmentation handling joint mechanism outputs. This gives a polynomial-time conditional-independence oracle on hypergraph SCMs, sound and complete under standard faithfulness.
 
-- **A mechanism-level identifiability calculus** (Lemma 1.1, Theorems T2/T3). Mechanism interventions admit truncated factorization formulas: $P(V \mid \mathrm{do}(\neg m^\star)) = P(V) / P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)) \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v)$ under causal sufficiency. The mechanism factor $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ — the joint conditional of a mechanism's outputs given its inputs — generalizes Pearl's parental factor.
+- **A mechanism-level identifiability calculus** (Lemma 1.1, Theorems T2/T3). Mechanism interventions admit truncated factorization formulas: $P(V \mid \mathrm{do}(\neg m^\star)) = P(V) / P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)) \cdot P_0^{m^\star}(\mathrm{out}(m^\star))$ under causal sufficiency. The mechanism factor $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ — the joint conditional of a mechanism's outputs given its inputs — generalizes Pearl's parental factor.
 
 - **An asymmetry between mechanism and variable interventions** (Theorem T4). In a hypergraph ADMG (HADMG) with all variables observed, mechanism deletion admits a closed-form identifier from observational data, even in the presence of hidden mechanisms. By contrast, variable interventions reduce (Theorem T5) to Pearl multi-variable ID on the bipartite blowup — case-analytic rather than uniform. Under hidden *variables* (§7) the asymmetry sharpens further: T6 closes the observed-boundary case in closed form, and only T7's boundary-violating case can genuinely fail via a hyper-hedge.
 
@@ -68,7 +68,7 @@ Under C1–C4 the connection is tighter than a comparison. Proposition T4.0 (`TH
 
 The operation $\mathrm{do}(m \to m')$ is not new, and we should be precise about what is. Tian & Pearl (2001) introduced *mechanism change* as an intervention primitive and used it for causal discovery. Correa & Bareinboim (2020) develop the $\sigma$-calculus for *soft* (stochastic, conditional) interventions, in which a structural function is replaced by another kernel; they give an identification algorithm and completeness results for soft transportability. Eberhardt & Scheines (2007) analyse soft versus hard interventions for discovery. Dawid's decision-theoretic framework and Spirtes-Glymour-Scheines policy variables express related ideas in different notation.
 
-Measured against that literature, the $\sigma$-intervention is strictly more general than ours: it may change a mechanism's parent set, whereas $\mathrm{do}(m \to m')$ pins $\rho(m') = \rho(m)$. Our intervention space is in that sense a *subset*, not a superset, and the same is true of $\mathrm{do}(\neg m)$, which is a $\sigma$-intervention on $\mathrm{out}(m)$ with the product kernel $\prod_v P_0(v)$.
+Measured against that literature, the $\sigma$-intervention is strictly more general than ours: it may change a mechanism's parent set, whereas $\mathrm{do}(m \to m')$ pins $\rho(m') = \rho(m)$. Our intervention space is in that sense a *subset*, not a superset, and the same is true of $\mathrm{do}(\neg m)$, which is a $\sigma$-intervention on $\mathrm{out}(m)$ with the input-free joint kernel $P_0^{m}$.
 
 Two things remain ours. First, incidence preservation is a genuine restriction with content — it is what makes "the same reaction, catalysed differently" a well-typed query and "a different reaction" a type error, which is the discipline a $\sigma$-intervention does not impose. Second, and more importantly, the unit of intervention is a first-class named object with a declared input/output boundary, so a query names a mechanism rather than a set of variables plus a kernel. That is a claim about vocabulary and auditability, not about expressive power or identification strength, and it should not be read as either.
 
@@ -102,7 +102,7 @@ The **typed incidence matrix** $M \in \{-1, 0, +1\}^{|V| \times |E|}$ is defined
 
 ### 3.2 Definition
 
-A **Hypergraph SCM** is a tuple $\mathcal{M} = (V, E, \rho, F, P, P_0)$ where $\rho : E \to 2^V \times 2^V$ assigns each $m$ to its typed incidence $(\mathrm{in}(m), \mathrm{out}(m))$; $F = \{f_m\}_{m \in E}$ is a collection of *joint structural functions* $f_m : \mathrm{Dom}(\mathrm{in}(m)) \times \mathrm{Dom}(u_m) \to \mathrm{Dom}(\mathrm{out}(m))$; $P$ is a product distribution over per-mechanism and per-exogenous-variable noise terms; and $P_0 = \{P_0(v)\}_{v \in V}$ is a *fallback distribution* invoked when interventions delete a variable's producing mechanism.
+A **Hypergraph SCM** is a tuple $\mathcal{M} = (V, E, \rho, F, P, P_0)$ where $\rho : E \to 2^V \times 2^V$ assigns each $m$ to its typed incidence $(\mathrm{in}(m), \mathrm{out}(m))$; $F = \{f_m\}_{m \in E}$ is a collection of *joint structural functions* $f_m : \mathrm{Dom}(\mathrm{in}(m)) \times \mathrm{Dom}(u_m) \to \mathrm{Dom}(\mathrm{out}(m))$; $P$ is a product distribution over per-mechanism and per-exogenous-variable noise terms; and $P_0 = \{P_0^m\}_{m \in E}$ assigns each mechanism a *fallback policy*: a joint law over $\mathrm{out}(m)$, invoked when an intervention deletes $m$. It is joint rather than a product of per-variable laws, so deleting a mechanism need not render its orphaned outputs independent.
 
 A Pearl SCM is precisely the special case $|\mathrm{out}(m)| = 1$ for all $m$, with $P_0$ trivial.
 
@@ -132,7 +132,7 @@ The proof is direct from the sampling procedures' identity (full proof: `THEOREM
 Three do-operators are well-defined on $\mathcal{M}$:
 
 - **Variable intervention.** $\mathrm{do}(v = x)$: delete every $m$ with $v \in \mathrm{out}(m)$, set $v$ to point mass $\delta_x$ in $V^{\mathrm{exo}}$.
-- **Mechanism deletion.** $\mathrm{do}(\neg m)$: delete $m$ from $E$. Variables in $\mathrm{out}(m)$ now lacking a producer fall back to $P_0$.
+- **Mechanism deletion.** $\mathrm{do}(\neg m)$: delete $m$ from $E$. The variables in $\mathrm{out}(m)$ now lacking a producer fall back *jointly* to $P_0^m$.
 - **Mechanism replacement.** $\mathrm{do}(m \to m')$: replace $f_m$ with $f_{m'}$, where $\rho(m') = \rho(m)$.
 
 The intervention space $\mathcal{I}(\mathcal{M}) = V \times \mathrm{Dom}(V) \cup \{\neg m : m \in E\} \cup \{m \to m' : \rho(m') = \rho(m)\}$ strictly contains Pearl's $V \times \mathrm{Dom}(V)$ whenever some $m$ has $|\mathrm{out}(m)| \geq 2$. This containment is the formal content of "first-class addressability of mechanisms."
@@ -178,10 +178,10 @@ The mechanism factor generalizes Pearl's parental factor $P(v \mid \mathrm{pa}(v
 **Theorem T2.** Under v1 conventions and causal sufficiency, for any $m^\star \in E$:
 
 $$
-P^{\mathcal{M}^{\neg m^\star}}(V) = \frac{P^{\mathcal{M}}(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v).
+P^{\mathcal{M}^{\neg m^\star}}(V) = \frac{P^{\mathcal{M}}(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot P_0^{m^\star}\!\left(\mathrm{out}(m^\star)\right).
 $$
 
-**Proof.** Apply Lemma 1.1 to both pre- and post-intervention distributions. Deletion removes the $m^\star$ factor from the product; under C4, every $v \in \mathrm{out}(m^\star)$ becomes orphaned and acquires a $P_0$ factor. Algebraic rearrangement yields the displayed formula. □
+**Proof.** Apply Lemma 1.1 to both pre- and post-intervention distributions. Deletion removes the $m^\star$ factor from the product; under C4, every $v \in \mathrm{out}(m^\star)$ becomes orphaned, and the set acquires the single joint factor $P_0^{m^\star}$. Algebraic rearrangement yields the displayed formula. □
 
 ### 5.3 Theorem T3: mechanism replacement
 
@@ -191,11 +191,11 @@ $$
 P^{\mathcal{M}^{m^\star \to m'}}(V) = \frac{P^{\mathcal{M}}(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot P_{f_{m'}}\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right).
 $$
 
-**Corollary T3.1.** Mechanism deletion is the special case of replacement where $m'$ is the *trivial mechanism* whose conditional distribution is the product of $P_0$ fallbacks, independent of inputs. Deletion and replacement are unified: deletion is "set this mechanism to its $P_0$-default" replacement.
+**Corollary T3.1.** Mechanism deletion is the special case of replacement where $m'$ is the *trivial mechanism* whose conditional distribution is the fallback policy $P_0^{m^\star}$, independent of inputs. Deletion and replacement are unified: deletion is "set this mechanism to its $P_0$-default" replacement.
 
 ### 5.4 What this gives, and why mechanism-level is *more* identifiable than Pearl multi-variable
 
-T2 and T3 are clean truncated-factorization formulas, mathematically simple but substantively important. The Pearl analogue of $\mathrm{do}(\neg m^\star)$ is the *stochastic multi-variable* intervention $\mathrm{do}\!\left(\mathrm{out}(m^\star) \sim \prod P_0\right)$, which under Pearl ADMG ID reduces to a multi-variable ID problem with case-analytic output (Bareinboim-Pearl 2016). The hypergraph framework, by contrast, treats $\mathrm{do}(\neg m^\star)$ as a *single* operation and gives it a closed-form identifier read directly from Lemma 1.1.
+T2 and T3 are clean truncated-factorization formulas, mathematically simple but substantively important. The Pearl analogue of $\mathrm{do}(\neg m^\star)$ is the *stochastic multi-variable* intervention $\mathrm{do}\!\left(\mathrm{out}(m^\star) \sim P_0^{m^\star}\right)$, which under Pearl ADMG ID reduces to a multi-variable ID problem with case-analytic output (Bareinboim-Pearl 2016). The hypergraph framework, by contrast, treats $\mathrm{do}(\neg m^\star)$ as a *single* operation and gives it a closed-form identifier read directly from Lemma 1.1.
 
 This is the first technical observation that mechanism-level identification is structurally simpler than its Pearl translation: a single expression replaces an algorithmic search. It anticipates the closed-form-vs-case-analytic asymmetry of T4.
 
@@ -212,7 +212,7 @@ A **HADMG** is a Hypergraph SCM in which a subset $E^{\mathrm{lat}} \subseteq E$
 **Theorem T4 (Mechanism-deletion identifiability under hidden mechanisms).** Let $\mathcal{M}$ be a HADMG with $V^{\mathrm{lat}} = \emptyset$. For any $m^\star \in E$ — observed or latent —
 
 $$
-P^{\mathcal{M}^{\neg m^\star}}(V) = \frac{P^{\mathcal{M}}(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v),
+P^{\mathcal{M}^{\neg m^\star}}(V) = \frac{P^{\mathcal{M}}(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot P_0^{m^\star}\!\left(\mathrm{out}(m^\star)\right),
 $$
 
 and this is identifiable from $P(V)$.
@@ -225,7 +225,7 @@ The asymmetry between T4 and T5 has two distinct components, which we separate c
 
 | Intervention type | Identifying expression under v1 + $V^{\mathrm{lat}} = \emptyset$ |
 |---|---|
-| $\mathrm{do}(\neg m)$ — mechanism deletion | **Closed form (T4):** $P(V) / P(\mathrm{out}(m) \mid \mathrm{in}(m)) \cdot \prod P_0$. Always identifiable; $O(\lvert V \rvert + \lvert E \rvert)$. |
+| $\mathrm{do}(\neg m)$ — mechanism deletion | **Closed form (T4):** $P(V) / P(\mathrm{out}(m) \mid \mathrm{in}(m)) \cdot P_0^{m}$. Always identifiable; $O(\lvert V \rvert + \lvert E \rvert)$. |
 | $\mathrm{do}(m \to m')$ — mechanism replacement | **Closed form (T3 + T4):** same denominator, replacement factor in numerator. |
 | $\mathrm{do}(v = x)$ — variable intervention | **Reduction (T5):** Pearl multi-variable ID on $B^\dagger(\mathcal{M})$. |
 
@@ -233,7 +233,7 @@ The asymmetry between T4 and T5 has two distinct components, which we separate c
 
 **(b) Robustness to hidden mechanisms.** T4's formula is invariant to whether $m^\star$ is observed or latent — only the typed incidence is needed. Variable-intervention identifiability via T5 depends on the specific bidirected-edge structure induced by latent mechanisms in $B^\dagger(\mathcal{M})$.
 
-A natural further question is whether T5 ever returns *unidentifiable* on a HADMG satisfying v1 conventions. Under HSCM intervention semantics, $\mathrm{do}(v=x)$ deletes the mechanism producing $v$ and orphans its siblings to $P_0$; this corresponds in $B^\dagger(\mathcal{M})$ to a multi-variable intervention spanning the entire output set, which severs all bidirected edges that the producing latent mechanism would otherwise contribute. We have not been able to exhibit a v1 HADMG on which a variable intervention is genuinely unidentifiable, and we conjecture none exist — but state this as observation rather than theorem. The asymmetry's strongest form, where mechanism deletion succeeds and variable intervention genuinely fails, is the hidden-variable setting (T7) treated in §7.
+A natural further question is whether T5 ever returns *unidentifiable* on a HADMG satisfying v1 conventions. Under HSCM intervention semantics, $\mathrm{do}(v=x)$ deletes the mechanism producing $v$ and orphans its siblings under the joint policy $P_0^m$; this corresponds in $B^\dagger(\mathcal{M})$ to a multi-variable intervention spanning the entire output set, which severs all bidirected edges that the producing latent mechanism would otherwise contribute. We have not been able to exhibit a v1 HADMG on which a variable intervention is genuinely unidentifiable, and we conjecture none exist — but state this as observation rather than theorem. The asymmetry's strongest form, where mechanism deletion succeeds and variable intervention genuinely fails, is the hidden-variable setting (T7) treated in §7.
 
 ### 6.4 The construction-vs-discovery objection
 
@@ -273,7 +273,7 @@ T6 is the cleanest form of the H1+ result: T4's formula extends *verbatim* to hi
 
 **Theorem T7.** When $\partial m^\star \not\subseteq V^{\mathrm{obs}}$, identifiability of $\mathrm{do}(\neg m^\star)$ from $P(V^{\mathrm{obs}})$ reduces to identifying a stochastic-intervention marginal in the bipartite-blowup ADMG $B^\dagger(\mathcal{M})$, governed by Shpitser-Pearl 2006's hedge criterion.
 
-**Proof sketch.** Mechanism deletion in $\mathcal{M}$ corresponds, under the bipartite blowup, to a stochastic intervention on $\mathrm{out}(m^\star)$ in $B^\dagger$ — assigning each output its $P_0$ distribution. Stochastic interventions reduce to standard $\mathrm{do}$ for identifiability purposes (Bareinboim-Pearl 2016). The post-intervention observed marginal is identifiable in $\mathcal{M}$ iff the corresponding marginal is identifiable in $B^\dagger$. Full sketch: `THEOREM_H1_PLUS.md` §3.
+**Proof sketch.** Mechanism deletion in $\mathcal{M}$ corresponds, under the bipartite blowup, to a stochastic intervention on $\mathrm{out}(m^\star)$ in $B^\dagger$ — resampling the output tuple jointly from $P_0^{m^\star}$. Stochastic interventions reduce to standard $\mathrm{do}$ for identifiability purposes (Bareinboim-Pearl 2016). The post-intervention observed marginal is identifiable in $\mathcal{M}$ iff the corresponding marginal is identifiable in $B^\dagger$. Full sketch: `THEOREM_H1_PLUS.md` §3.
 
 T7 is again a *reduction*: the boundary-violating case contains nothing new in principle — Pearl's existing machinery, applied to the right Pearl ADMG, settles the question.
 
@@ -450,7 +450,7 @@ Run: `python -m minimal_model.test_example` (and analogously for `test_dseparati
 | $V^{\mathrm{exo}}$ | variables produced by no mechanism |
 | $V^{\mathrm{obs}}, V^{\mathrm{lat}}$ | observed and latent variables (HADMG) |
 | $E^{\mathrm{obs}}, E^{\mathrm{lat}}$ | observed and latent mechanisms (HADMG) |
-| $P_0(v)$ | fallback exogenous distribution for $v$ |
+| $P_0^m$ | fallback policy: joint law over $\mathrm{out}(m)$ installed when $m$ is deleted |
 | $G_E$ | mechanism dependency graph |
 | $B(\mathcal{M})$ | bipartite blowup |
 | $B^\dagger(\mathcal{M})$ | bipartite-blowup ADMG |

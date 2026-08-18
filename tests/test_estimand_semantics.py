@@ -58,9 +58,12 @@ def p_f_given_ce(f: int, c: int, e: int) -> float:
     return p_one if f == 1 else 1.0 - p_one
 
 
-# Fallback (post-deletion) laws for m1's outputs.
-P0_C = {0: 0.75, 1: 0.25}
-P0_D = {0: 0.5, 1: 0.5}
+# The post-deletion policy for m1's outputs: one *joint* law over (C, D), not a product.
+# m1 produces C and D from a coupled kernel, and the coupling is physical -- removing the
+# mechanism does not make the two products independent. This table does not factorize
+# (its marginals are 0.55/0.45 each, whose product puts 0.3025 on (0,0), not 0.5), so the
+# tests below cannot be satisfied by any product of per-variable fallbacks.
+P0_M1 = {(0, 0): 0.5, (0, 1): 0.05, (1, 0): 0.05, (1, 1): 0.4}
 
 VARIABLES = ("A", "B", "C", "D", "E", "F")
 DOMAINS = {v: BINARY for v in VARIABLES}
@@ -86,15 +89,14 @@ def observational_joint() -> dict[tuple[int, ...], float]:
 
 
 def interventional_joint_delete_m1() -> dict[tuple[int, ...], float]:
-    """P(V | do(not m1)): m1's factor is replaced by the declared fallback laws."""
+    """P(V | do(not m1)): m1's factor is replaced by the declared joint fallback policy."""
     joint = {}
     for x in _assignments():
         joint[tuple(x[v] for v in VARIABLES)] = (
             P_A[x["A"]]
             * P_B[x["B"]]
             * P_E[x["E"]]
-            * P0_C[x["C"]]
-            * P0_D[x["D"]]
+            * P0_M1[(x["C"], x["D"])]
             * p_f_given_ce(x["F"], x["C"], x["E"])
         )
     return joint
@@ -132,7 +134,7 @@ def test_t2_deletion_estimand_reproduces_interventional_law_on_positive_model() 
     model = DiscreteModel(
         domains=DOMAINS,
         joint=observational_joint(),
-        fallbacks={"C": P0_C, "D": P0_D},
+        fallbacks={"m1": P0_M1},
     )
     truth = interventional_joint_delete_m1()
 
@@ -204,7 +206,7 @@ def test_deletion_of_a_deterministic_mechanism_is_identified_on_the_full_support
     model = DiscreteModel(
         domains=DOMAINS,
         joint=observational_joint_coupled(),
-        fallbacks={"C": P0_C, "D": P0_D},
+        fallbacks={"m1": P0_M1},
     )
     truth = interventional_joint_delete_m1()
 
@@ -287,7 +289,7 @@ def test_oracle_rejects_a_wrong_estimand() -> None:
     model = DiscreteModel(
         domains=DOMAINS,
         joint=observational_joint(),
-        fallbacks={"C": P0_C, "D": P0_D},
+        fallbacks={"m1": P0_M1},
     )
     truth = interventional_joint_delete_m1()
     surviving = [
@@ -298,8 +300,8 @@ def test_oracle_rejects_a_wrong_estimand() -> None:
     ]
 
     wrong_estimands = {
-        # Drops a fallback factor: the shape still looks like a truncated factorization.
-        "missing fallback": Product([*surviving, Fallback("C")]),
+        # Drops the fallback factor: the shape still looks like a truncated factorization.
+        "missing fallback": Product(surviving),
         # Keeps the deleted mechanism's factor instead of replacing it: this is P(V).
         "target factor retained": Product(
             [*surviving, Probability(("C", "D"), given=("A", "B"))]
@@ -311,8 +313,7 @@ def test_oracle_rejects_a_wrong_estimand() -> None:
                 Probability(("B",)),
                 Probability(("E",)),
                 Probability(("F",), given=("E",)),
-                Fallback("C"),
-                Fallback("D"),
+                Fallback("m1", ("C", "D")),
             ]
         ),
     }
@@ -325,3 +326,40 @@ def test_oracle_rejects_a_wrong_estimand() -> None:
             != pytest.approx(truth[tuple(x[v] for v in VARIABLES)], abs=1e-12)
         ]
         assert mismatches, f"oracle failed to reject the {label!r} estimand"
+
+
+def test_no_per_variable_fallback_reproduces_a_coupled_deletion() -> None:
+    """The regression detector for `P0`'s type, stated as a claim about expressive power.
+
+    The best per-variable approximation to a joint policy is the product of its own
+    marginals, and that is precisely the family the old type could express. Running the
+    *correct* compiled estimand against that product policy must disagree with the truth,
+    which shows the joint type is not a more convenient spelling of the same power: the
+    target law is outside the old family entirely.
+    """
+    marginal_c = {c: sum(P0_M1[(c, d)] for d in BINARY) for c in BINARY}
+    marginal_d = {d: sum(P0_M1[(c, d)] for c in BINARY) for d in BINARY}
+    product_policy = {
+        (c, d): marginal_c[c] * marginal_d[d] for c in BINARY for d in BINARY
+    }
+    assert sum(product_policy.values()) == pytest.approx(1.0, abs=1e-12)
+
+    result = identify(reaction_mechanism_graph(), DeleteMechanism("m1"))
+    assert isinstance(result, Identified)
+    truth = interventional_joint_delete_m1()
+    model = DiscreteModel(
+        domains=DOMAINS,
+        joint=observational_joint(),
+        fallbacks={"m1": product_policy},
+    )
+
+    mismatches = [
+        x
+        for x in _assignments()
+        if evaluate(result.expression, model, x)
+        != pytest.approx(truth[tuple(x[v] for v in VARIABLES)], abs=1e-12)
+    ]
+    assert mismatches, (
+        "the product of the policy's own marginals reproduced the coupled interventional "
+        "law, so this fixture cannot distinguish a joint fallback from a per-variable one"
+    )

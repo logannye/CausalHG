@@ -30,7 +30,7 @@ Note $C$ has both signs — it is an output of $m_1$ and an input of $m_2$. This
 
 Exogenous: $V^{\mathrm{exo}} = \{A, B, E\}$, with $A, B, E \sim \mathrm{Unif}(1, 5)$ independent.
 
-Fallback distribution: $P_0(v) = \delta_0$ for all $v$ (concentration zero when no producing mechanism is active).
+Fallback policy: $P_0^{m_1} = \delta_0 \otimes \delta_0$ (concentration zero for both products when the producing mechanism is not active). This one factorizes; the type does not require it to.
 
 ---
 
@@ -90,7 +90,7 @@ This is a standard Pearl variable intervention; the bipartite blowup makes it Pe
 
 ### 4.2 Intervention 2: $\mathrm{do}(\neg m_1)$ — *the new operation*
 
-Delete mechanism $m_1$. Variables $C$ and $D$ have no remaining producer; they enter $V^{\mathrm{exo}}$ with $P_0 = \delta_0$. Then:
+Delete mechanism $m_1$. Variables $C$ and $D$ have no remaining producer; they enter $V^{\mathrm{exo}}$ jointly with $P_0^{m_1} = \delta_0 \otimes \delta_0$. Then:
 
 $$
 C = D = 0, \qquad F = k_2 \cdot 0 \cdot E + u_2 = u_2 \sim \mathcal{N}(0,\, 0.01)
@@ -168,7 +168,7 @@ $u^{\mathrm{exo}}_A = 2, u^{\mathrm{exo}}_B = 3, u^{\mathrm{exo}}_E = 4, u_1^* =
 
 ### Step 2 — Action
 
-Apply $\mathrm{do}(\neg m_1)$. Mechanism $m_1$ is removed; $C$ and $D$ become exogenous with point mass $0$ (the fallback $P_0$).
+Apply $\mathrm{do}(\neg m_1)$. Mechanism $m_1$ is removed; $C$ and $D$ become exogenous with point mass $0$ (the fallback policy $P_0^{m_1}$).
 
 ### Step 3 — Prediction
 

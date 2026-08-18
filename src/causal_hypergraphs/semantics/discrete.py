@@ -70,7 +70,10 @@ class DiscreteModel:
         checks normalization because an unnormalized fixture makes a differential test
         vacuous.
     fallbacks:
-        Per-variable fallback laws ``P0(v)``, as ``{variable: {value: probability}}``.
+        Per-mechanism *joint* fallback policies ``P0^m(out(m))``, as
+        ``{mechanism_name: {output_values: probability}}`` where the key is a value tuple
+        in sorted-variable order. Joint rather than per-variable because deleting a
+        mechanism orphans all of its outputs at once; see `Fallback` in the AST.
     replacements:
         Replacement mechanism kernels, as
         ``{mechanism_name: {(output_values, input_values): probability}}`` where both
@@ -79,7 +82,7 @@ class DiscreteModel:
 
     domains: Mapping[str, tuple[Any, ...]]
     joint: Mapping[tuple[Any, ...], float]
-    fallbacks: Mapping[str, Mapping[Any, float]] = field(default_factory=dict)
+    fallbacks: Mapping[str, Mapping[tuple[Any, ...], float]] = field(default_factory=dict)
     replacements: Mapping[str, Mapping[tuple[Any, ...], float]] = field(default_factory=dict)
 
     @property
@@ -132,14 +135,31 @@ class DiscreteModel:
             )
         return numerator / denominator
 
-    def fallback(self, variable: str, assignment: Assignment) -> float:
+    def fallback(
+        self, mechanism: str, variables: Sequence[str], assignment: Assignment
+    ) -> float:
+        """``P0^mechanism(variables)`` evaluated at ``assignment``.
+
+        A missing table or a missing cell raises rather than defaulting. An absent cell in
+        a joint policy is a specification error -- treating it as zero would silently
+        install a different policy than the caller declared.
+        """
         try:
-            table = self.fallbacks[variable]
+            table = self.fallbacks[mechanism]
         except KeyError as exc:
-            raise MissingKernel(f"No fallback law P0({variable}) supplied.") from exc
-        if variable not in assignment:
-            raise SemanticsError(f"Assignment does not bind {variable!r}.")
-        return table[assignment[variable]]
+            raise MissingKernel(
+                f"No fallback policy P0_{mechanism}({','.join(variables)}) supplied."
+            ) from exc
+        missing = [v for v in variables if v not in assignment]
+        if missing:
+            raise SemanticsError(f"Assignment does not bind {missing}.")
+        key = tuple(assignment[v] for v in sorted(variables))
+        try:
+            return table[key]
+        except KeyError as exc:
+            raise MissingKernel(
+                f"Fallback policy P0_{mechanism} has no entry for {key!r}."
+            ) from exc
 
     def replacement(
         self, mechanism: str, variables: Sequence[str], given: Sequence[str], assignment: Assignment
@@ -184,7 +204,7 @@ def _(expression: Probability, model: DiscreteModel, assignment: Assignment) -> 
 
 @evaluate.register
 def _(expression: Fallback, model: DiscreteModel, assignment: Assignment) -> float:
-    return model.fallback(expression.variable, assignment)
+    return model.fallback(expression.mechanism, expression.variables, assignment)
 
 
 @evaluate.register

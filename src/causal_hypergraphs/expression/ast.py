@@ -97,25 +97,40 @@ class Probability(Expression):
 
 @dataclass(frozen=True)
 class Fallback(Expression):
-    variable: str
+    """The intervention policy `P0^m(out(m))` installed when mechanism `m` is deleted.
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "variable", str(self.variable))
+    This is a *joint* kernel over all of `m`'s outputs, deliberately not a product of
+    per-variable laws. Deleting a mechanism orphans its outputs simultaneously, and a
+    product form would force them independent -- silently ruling out the case where a
+    mechanism's outputs stay coupled after the mechanism is removed. A product policy is
+    still expressible as a joint kernel that happens to factorize, so nothing is lost.
+
+    There is no `given`: deletion removes the mechanism, so `in(m)` no longer influences
+    `out(m)`. A policy that still reads the inputs is a *replacement*, not a deletion, and
+    belongs in `ReplacementFactor`.
+    """
+
+    mechanism: str
+    variables: tuple[str, ...]
+
+    def __init__(self, mechanism: str, variables: object) -> None:
+        object.__setattr__(self, "mechanism", str(mechanism))
+        object.__setattr__(self, "variables", _items(variables))
 
     def __str__(self) -> str:
-        return f"P0({self.variable})"
+        return f"P0_{self.mechanism}({_join(self.variables)})"
 
     def to_latex(self) -> str:
-        return rf"P_0({self.variable})"
+        return rf"P_0^{{{self.mechanism}}}({_join(self.variables)})"
 
     def scope(self) -> frozenset[str]:
-        return frozenset({self.variable})
+        return frozenset(self.variables)
 
     def kernels(self) -> tuple[Kernel, ...]:
-        return (Kernel("fallback", "P0", (self.variable,)),)
+        return (Kernel("fallback", f"P0_{self.mechanism}", self.variables),)
 
     def canonical_key(self) -> tuple[Any, ...]:
-        return ("fallback", self.variable)
+        return ("fallback", self.mechanism, self.variables)
 
 
 @dataclass(frozen=True)

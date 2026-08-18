@@ -17,5 +17,5 @@ def test_readme_primary_snippet_smoke() -> None:
     # caller has established that the query was identified.
     assert isinstance(result, Identified)
     assert result.status == "identified"
-    assert str(result.expression) == "P(A) * P(B) * P(E) * P(F | C,E) * P0(C) * P0(D)"
+    assert str(result.expression) == "P(A) * P(B) * P(E) * P(F | C,E) * P0_m1(C,D)"
     assert result.theorem == "T2"

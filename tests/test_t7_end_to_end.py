@@ -51,7 +51,7 @@ def test_t7_frontdoor_deletion_path_identifies_when_enabled() -> None:
     assert isinstance(result, Identified)
     assert result.theorem == "T7"
     assert str(result.expression) == (
-        "sum_{X} P0(X) * "
+        "sum_{X} P0_m_x(X) * "
         "sum_{Z} P(Z | X) * sum_{X_prime} P(X_prime) * P(Y | X_prime,Z)"
     )
     assert result.expression.scope() == frozenset({"Y"})
