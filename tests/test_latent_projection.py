@@ -266,3 +266,37 @@ def test_no_edge_of_the_projection_mentions_a_hidden_variable() -> None:
         assert not (mentioned & hidden), f"seed {seed}: {sorted(mentioned & hidden)}"
 
     assert with_hidden > 30, with_hidden
+
+
+def test_the_projection_no_longer_produces_a_confident_wrong_answer() -> None:
+    """The end-to-end consequence, kept as a regression.
+
+    Before the repair this graph identified, via T7, an estimand containing
+    `P(C | X) * P(D | X)` -- two factors where the truth has one, `P(C,D | X)`, because
+    `C` and `D` are jointly produced by a single mechanism and the projection recorded no
+    confounding between them. It was `Identified`, it was wrong, and nothing said so.
+
+    With the districts correct the stub backend can no longer pretend to handle it, so the
+    answer becomes an honest refusal. Turning a confident wrong answer into a refusal is
+    the improvement; identifying it correctly is what a real ID backend is for.
+    """
+    graph = MechanismGraph(
+        variables={"A", "X", "C", "D", "Y", "H"},
+        observed_variables={"A", "X", "C", "D", "Y"},
+        mechanisms={
+            "m_h": {"inputs": (), "outputs": ("H",), "latent": True},
+            "m_x": {"inputs": ("A", "H"), "outputs": ("X",)},
+            "m_cd": {"inputs": ("X",), "outputs": ("C", "D")},
+            "m_y": {"inputs": ("C", "D"), "outputs": ("Y",)},
+        },
+    )
+    admg = latent_project_to_variable_admg(graph)
+
+    assert ("C", "D") in admg.districts()
+    assert admg.bidirected_edges == (("C", "D"),)
+
+    from causal_hypergraphs import DeleteMechanism, Identified, identify
+
+    result = identify(graph, DeleteMechanism("m_x", outcomes={"Y"}), allow_t7=True)
+    if isinstance(result, Identified):
+        assert "P(C | X) * P(D | X)" not in str(result.expression), result.expression

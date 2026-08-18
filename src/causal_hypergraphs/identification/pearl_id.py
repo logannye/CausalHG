@@ -232,7 +232,9 @@ class PearlIDBackend:
 
         frontdoor = self._frontdoor_expression(graph, outcomes, interventions)
         if frontdoor is not None:
+            (intervened,) = sorted(interventions)
             return Identified(
+                aliases={f"{intervened}_prime": intervened},
                 expression=frontdoor,
                 theorem="Pearl-ID front-door",
                 assumptions=PEARL_ASSUMPTIONS
