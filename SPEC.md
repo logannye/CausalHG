@@ -97,7 +97,11 @@ contains:
 - `Probability(variables, given=...)` for observational kernels.
 - `MechanismFactor(name, variables, given=...)` for named mechanism kernels.
 - `ReplacementFactor(name, variables, given=...)` for replacement kernels.
-- `Fallback(variable)` for fallback output factors.
+- `Fallback(mechanism, variables)` for the joint deletion policy `P0^m(out(m))`. One
+  factor over all of the deleted mechanism's outputs, not one per variable.
+- `ConditionalExpectation(target, given=...)` for `E[target | given]`. The target is
+  integrated inside the node, so it is neither free nor bound and its domain is never
+  enumerated — which is what allows it to be continuous.
 - `Product([...])` for commutative products.
 - `Quotient(numerator, denominator)` for local factor removal.
 - `SumOut(variables, expression)` for marginalization.
@@ -105,10 +109,18 @@ contains:
 Expressions must expose:
 
 - a canonical key for stable equality and hashing,
-- the variable scope required to evaluate the expression,
+- `scope()` — the variables an assignment must bind to evaluate the expression,
+- `footprint()` — every variable evaluation ranges over, bound ones included. The two
+  differ exactly at `SumOut`, and conflating them is a bug: `scope` says what a caller
+  supplies, `footprint` says what enumeration costs.
 - the conditioning variables,
 - the primitive kernels referenced by the expression,
 - plain-text and LaTeX renderings.
+
+An estimand may be evaluated by enumeration over its footprint or by variable
+elimination; both must return the same value, and the same kernel cells must be read
+either way, since the positivity certificates that come due are defined as the cells the
+evaluator touched.
 
 String rendering is for human inspection only. Tests that assert compiler
 semantics should prefer AST properties when possible.

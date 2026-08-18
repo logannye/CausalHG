@@ -141,22 +141,57 @@ summing to one, so it is dropped rather than summed:
 identify(graph, DeleteMechanism("m1", outcomes={"F"}))
 ```
 
-The reduction is exact, and `expression.footprint()` reports what evaluation now costs
-(`scope()` says what a caller must supply; they differ at `SumOut`). On a 20,000-gene
-sparse GRN, the cost of `P(readout | delete(m))` by hop distance from the intervention:
-
-| at the target | 1 hop | 2 hops | deepest descendant | full joint |
-|---|---|---|---|---|
-| `2**4` | `2**21` | `2**56` | `2**468` | `2**20000` |
-
-So this makes the *neighbourhood* of an intervention computable — the common query — and
-leaves deep ancestries out of reach. Those need variable elimination, whose cost is
-exponential in treewidth rather than in ancestry size; that is not implemented.
+The reduction is exact, and `expression.footprint()` reports what enumeration would now
+cost (`scope()` says what a caller must supply; they differ at `SumOut`).
 
 When the target mechanism falls outside the closure, the estimand collapses to
 `P(outcomes)`. That is stronger than a numerical coincidence: the expression mentions
 neither the mechanism nor its policy, so the answer *cannot* depend on what the
 intervention installs.
+
+### What a query costs: variable elimination
+
+The reduction changes the exponent; it does not remove one. An ancestry of 56 variables is
+as unenumerable as one of 20,000. So estimands are evaluated by **variable elimination**:
+summation distributes over a product, so each inner sum is computed once and kept, and the
+largest object built is a table over one *bucket* — the variables that meet at a single
+elimination step — rather than over the whole ancestry.
+
+```python
+plan = plan_elimination(q.expression, {name: (0, 1) for name in genes})
+plan.summary()
+# 'eliminate 60 variable(s) at induced width 1; largest table 4 entries,
+#  against 1152921504606846976 assignments for enumeration'
+```
+
+Measured on a synthetic 20,000-gene sparse GRN (fan-in 3, regulators drawn from a moving
+window), by hop distance from the intervention — this table is produced by
+`test_a_sparse_gene_network_is_affordable_near_the_intervention_and_not_far_from_it`:
+
+| hops | ancestry | enumeration | largest elimination table |
+|---|---|---|---|
+| 0 | 7 vars | `2**7` | 16 entries |
+| 2 | 25 vars | `2**25` | 16 entries |
+| 5 | 111 vars | `2**111` | 64 entries |
+| 6 | 174 vars | `2**174` | 1,024 entries |
+| 7 | 292 vars | `2**292` | `2**25` entries |
+| 8 | 381 vars | `2**381` | `2**37` entries |
+
+Both halves matter. Near the intervention the win is total — a hundred-variable ancestry
+for the price of a 64-entry table. Around seven hops the ancestries of different branches
+start to overlap, the width climbs, and the query becomes unaffordable again. That wall is
+real, and `eliminate` refuses by name rather than trying:
+
+```text
+IntractableQuery: Elimination needs a table of 33554432 entries (25 variable(s),
+induced width 24), above the 1048576-entry bound. The variables [...] meet at one
+elimination step, so widening the bound helps only if the width is nearly affordable;
+otherwise ask about a narrower outcome, or measure a variable that splits the bucket.
+```
+
+`estimate(..., method="enumerate")` walks the whole footprint instead, and exists because
+agreement between the two is what verifies the fast path. `estimate` reports what the query
+cost in its `summary()`.
 
 ### Continuous readouts: `E[Y | do]`
 
@@ -345,14 +380,17 @@ theorem, its assumptions, and its derivation attached.
   refusals with suggested next steps.
 - Verified replacement incidence when a `Mechanism` is supplied, which discharges the
   `rho(m') = rho(m)` certificate into a derivation step.
-- Finite-discrete semantics for evaluating estimands.
+- Finite-discrete semantics for evaluating estimands, by enumeration (`evaluate`, the
+  reference) or by variable elimination (`eliminate`, the default in `estimate`).
+- `plan_elimination`: what a query will cost, and its induced width, before paying it.
 - Marginal queries: `outcomes` reduces an estimand to its ancestral closure, exactly.
 - Expectation functionals: `E[Y | do]` for a continuous readout, no binning.
 - Covariate admissibility: `check_covariates` separates structural post-treatment
   findings from faithfulness-dependent path-opening warnings.
 - A data-facing estimator: `Dataset` (+ declared unit of independence), `estimate`,
   positivity discharge against the empirical support, and unit-bootstrap intervals
-  measured at 94.3% coverage over 1,568 intervals.
+  measured at 94.3% coverage over 1,568 intervals. Kernels are counted per factor, so
+  no joint over the estimand's footprint is ever assembled.
 - `d*`-separation on the bipartite blowup with equality-based determination closure,
   by Bayes-Ball reachability in `O(V + E)`.
 - A deliberately isolated Pearl-ID backend (observational marginals, Markovian
@@ -367,12 +405,17 @@ theorem, its assumptions, and its derivation attached.
   deletion only — which is the Pearl-degenerate case, not the hypergraph one.
 - Hyper-hedge completeness. Open conjecture.
 - Complete Pearl-ID beyond the currently implemented backend cases.
-- Cyclic mechanism graphs; Markov-kernel mechanisms; richer role typing
-  (substrate / enzyme / product); mechanism-correlated noise.
-- Variable elimination. Marginal queries reduce to the outcome's ancestry, which makes
-  the neighbourhood of an intervention computable but leaves deep ancestries
-  (`2**468` on a 20k-gene GRN) out of reach. Cost exponential in treewidth rather than
-  ancestry size is the missing piece.
+- Markov-kernel mechanisms; richer role typing (substrate / enzyme / product);
+  mechanism-correlated noise.
+- Queries wider than their treewidth. Elimination moved the frontier a long way — a
+  111-variable ancestry costs a 64-entry table — but around seven hops into a sparse GRN
+  the branches' ancestries overlap, the induced width passes 20, and the query is
+  unaffordable again. `eliminate` refuses by name rather than attempting it. Getting past
+  that needs approximation (loopy propagation, sampling) or conditioning, which would
+  trade the exactness this library is built on and is not implemented.
+- A better elimination order. Min-fill is the standard heuristic, not an optimal order,
+  and its own cost is quadratic in the ancestry — so on a very wide closure the *ordering*
+  becomes the bottleneck before the elimination does.
 - Continuous *conditioning* variables. Outcomes may be continuous via `E[Y | do]`;
   anything conditioned on must still be binned by the caller, deliberately.
 - Cyclic mechanism graphs. C1 rejects feedback at construction, which rules out most
@@ -380,7 +423,7 @@ theorem, its assumptions, and its derivation attached.
 
 ## Status and known gaps
 
-The suite is `125 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+The suite is `215 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
 
 Correctness is established by a randomized differential harness (`tests/conformance/`)
 rather than by comparing rendered strings. It generates models satisfying C1–C4 with
@@ -403,11 +446,6 @@ The harness is itself tested against deliberately wrong estimands, an oracle tha
 separates everything, and a faithful reconstruction of the historical partial-determination
 bug — which it catches 63 times. Results are byte-identical across `PYTHONHASHSEED`
 values.
-
-One gap is worth naming up front:
-
-- **`d*`-separation is not wired into identification.** The oracle exists and is
-  sound, but nothing in `identification/` consults it.
 
 `T1` previously carried a broken step (`Fact 4b`, a claimed equality between the
 declared determination closure and the true one, which fails on this framework's own
@@ -455,8 +493,8 @@ src/causal_hypergraphs/
   expression/       probability expression algebra
   identification/   T2/T3/T4/T6 compilers, Pearl-ID backend, T7 track
   separation/       d*-separation and determination closure
-  semantics/        finite-discrete evaluation of estimands
-  estimation/       datasets, estimation from data, certificate discharge
+  semantics/        finite-discrete evaluation: enumeration and variable elimination
+  estimation/       datasets, factored empirical model, estimation, certificate discharge
 
 minimal_model/      NumPy reference implementation
 tests/              compiler, semantics, and separation tests

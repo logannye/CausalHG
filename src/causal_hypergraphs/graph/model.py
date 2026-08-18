@@ -182,12 +182,25 @@ class MechanismGraph:
             raise KeyError(f"No mechanism named {name!r}") from exc
 
     def mechanism_dependencies(self) -> dict[str, set[str]]:
+        """`m -> m'` whenever an output of `m` is an input of `m'`.
+
+        Indexed by variable rather than by comparing every pair of mechanisms. Both give
+        the same edges, but this runs in the number of incidences instead of the square of
+        the number of mechanisms -- and since every graph validates acyclicity at
+        construction, the difference is the cost of *loading* a network at all. A
+        20,000-mechanism graph is seconds one way and tens of seconds the other.
+        """
+        consumers: dict[str, list[str]] = {}
+        for name, mechanism in self.mechanisms.items():
+            for variable in mechanism.inputs:
+                consumers.setdefault(variable, []).append(name)
+
         edges: dict[str, set[str]] = {name: set() for name in self.mechanisms}
         for name, mechanism in self.mechanisms.items():
-            outputs = set(mechanism.outputs)
-            for other_name, other in self.mechanisms.items():
-                if name != other_name and outputs & set(other.inputs):
-                    edges[name].add(other_name)
+            for variable in mechanism.outputs:
+                edges[name].update(
+                    other for other in consumers.get(variable, ()) if other != name
+                )
         return edges
 
     def is_mechanism_acyclic(self) -> bool:

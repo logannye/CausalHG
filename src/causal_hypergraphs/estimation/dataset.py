@@ -259,10 +259,14 @@ class Dataset:
     ) -> DiscreteModel:
         """A `DiscreteModel` whose observational law is this dataset's empirical law.
 
-        Restricted to `variables` -- normally the estimand's scope. Marginalization
-        commutes with the evaluator's own marginalization, so restricting here is exact
-        and keeps the materialized joint exponential in the estimand's scope rather than
-        in the dataset's width.
+        Restricted to `variables`. Marginalization commutes with the evaluator's own, so
+        restricting here is exact and keeps the materialized joint exponential in the
+        estimand's footprint rather than in the dataset's width.
+
+        Exponential in the footprint is still exponential, which is why `estimate` does
+        **not** use this: it builds an `EmpiricalModel`, which counts each factor over that
+        factor's own variables and never assembles a joint at all. Use this one for exact
+        work on a handful of variables, where having the whole law in hand is the point.
         """
         ordered = tuple(variables)
         return DiscreteModel(
