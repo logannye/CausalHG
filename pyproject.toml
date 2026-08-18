@@ -40,7 +40,7 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pyright]
 include = ["src", "tests"]
 # src layout: resolve `causal_hypergraphs` from a checkout without requiring an install,
-# matching the `pythonpath` pytest already uses.
-extraPaths = ["src"]
+# and the repo root so `tests.conformance` resolves. Mirrors the `pythonpath` pytest uses.
+extraPaths = ["src", "."]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
