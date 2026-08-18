@@ -167,22 +167,29 @@ def cycles_reaching(
     its mechanisms has its outputs inside the closure then every other mechanism on the
     cycle is an ancestor of that one, so the closure contains the whole cycle.
 
-    `without` names a mechanism whose kernel the intervention replaces, so that the walk
-    can be taken in the post-deletion graph. It is **not** used by the identifier, and the
-    reason is worth stating because the refinement it enables is genuinely tempting.
+    `without` names a mechanism the query *deletes*, so the walk is taken on the
+    post-deletion graph. A deletion replaces the target's factor with a policy and severs
+    its incoming edges, so a cycle strictly upstream of it can no longer reach the outcome
+    and is as irrelevant as a cycle in another component. That carve-out is the point:
+    feedback upstream of a knockdown is the normal case in biology, and without it the
+    compiler refuses the ordinary shape of a perturbation experiment.
 
-    A deletion severs the target's cycle, so on the post-deletion graph a cycle strictly
-    upstream of the intervention is unreachable and the query looks answerable. It is not,
-    as the code stands: `_restrict_to_ancestry` computes its own closure on the
-    *observational* graph and therefore keeps the cyclic factors, and their product does
-    not integrate away. `sum_{x,y} P(x|y) P(y|x)` ranges over `[1, 2]` on random binary
-    joints, so the estimand can be wrong by a factor of two.
+    It is sound only because `_restrict_to_ancestry` is given the same `without` and
+    therefore drops those factors too. Passing it here while the reduction still closed
+    over the observational graph would identify the query and *keep* the cyclic factors,
+    whose product does not integrate away -- `sum_{x,y} P(x|y) P(y|x)` ranges over `[1, 2]`
+    on random binary joints, so the estimand could be wrong by a factor of two. The two
+    move together or not at all.
 
-    Weakening the check to use this therefore requires `_restrict_to_ancestry` to drop
-    those factors as well -- justified by the post-*intervention* law factorizing over the
-    post-intervention graph, rather than by the current "every factor outside the closure
-    integrates to one", which is exactly the sentence that stops being true under cycles.
-    `test_the_upstream_cycle_refinement_is_not_safe_yet` holds the door shut.
+    Do **not** pass `without` for a replacement: `rho(m') = rho(m)` means the new kernel
+    still reads `in(m)`, so nothing upstream is severed and all of it is still required.
+
+    `graph.cyclic_mechanisms` stays *observational* on purpose, and that is what keeps the
+    carve-out honest. The estimand is built from observational conditionals, and for a
+    mechanism on an observational cycle `P(out(m) | in(m))` is not its structural kernel no
+    matter what the intervention severs elsewhere. Only the ancestry walk becomes
+    post-intervention; which kernels are trustworthy does not. So a cycle the deletion
+    breaks, but whose mechanisms remain inside the closure, is still refused.
     """
     return tuple(
         sorted(graph.cyclic_mechanisms & relevant_mechanisms(graph, outcomes, without))
@@ -266,10 +273,11 @@ def ancestral_closure(
     Everything outside this set is irrelevant to `P(outcomes | do)` and can be dropped
     rather than summed, which is what makes a marginal query cheap.
 
-    `without` names a mechanism to walk as if it were absent: its outputs become sources,
-    and neither they nor its inputs pull anything further in. That is the *post-deletion*
-    graph, and it is the right one for asking which kernels an answer needs -- a deletion
-    replaces the target's factor with a policy, so nothing upstream of it is required.
+    `without` names a mechanism to walk as if it were deleted: its outputs become sources,
+    so the walk keeps all of `out(m)` -- the replacing policy `P0^m(out(m))` is a joint and
+    cannot be split -- but stops there instead of climbing to `in(m)`. That is the
+    *post-deletion* graph, and it is the right one for asking what an answer needs: a
+    deletion replaces the target's factor with a policy, so nothing upstream is required.
     """
     wanted = _observed(graph, outcomes) if outcomes else frozenset()
     producer = {
@@ -285,9 +293,22 @@ def ancestral_closure(
             continue
         needed.add(variable)
         name = producer.get(variable)
-        if name is None or name == without:
-            continue  # exogenous, or produced by a mechanism the intervention removes
+        if name is None:
+            continue  # exogenous
         mechanism = graph.get_mechanism(name)
+        if name == without:
+            # The deletion replaces this mechanism's factor with `P0^m(out(m))`, which is a
+            # *joint* over all of out(m) and cannot be split -- so reaching one output
+            # requires every co-output, exactly as the observational walk requires all of
+            # out(m). What the deletion does remove is the dependence on `in(m)`, so the
+            # walk stops there rather than climbing further.
+            #
+            # Omitting the co-outputs is not a smaller closure, it is a wrong one: the
+            # policy factor then fails `footprint() <= needed`, gets dropped as though the
+            # intervention could not reach the outcome, and the estimand silently collapses
+            # to the observational `P(outcomes)`.
+            frontier.extend(set(mechanism.outputs))
+            continue
         frontier.extend(set(mechanism.outputs) | set(mechanism.inputs))
     return frozenset(needed)
 
@@ -296,15 +317,27 @@ def _restrict_to_ancestry(
     expression: Product,
     graph: MechanismGraph,
     outcomes: tuple[str, ...],
+    without: str | None = None,
 ) -> tuple[Expression, ProofStep | None]:
     """Reduce a truncated-factorization product to a marginal query on `outcomes`.
 
-    Exact, by the ordinary ancestral argument: every retained factor is a conditional
-    `P(out(m) | in(m))` that sums to one over `out(m)` at fixed `in(m)`, so summing the
-    full product over the variables outside the ancestral closure collapses each of their
-    factors to one and removes it. No factor outside the closure conditions on a variable
-    inside it -- if it did, that variable would be in the closure -- so the elimination
-    order is unconstrained.
+    Exact, by the ancestral argument taken on the *post-intervention* graph. An
+    ancestrally-closed set is self-contained -- its variables depend only on their own
+    ancestors, and C2 makes the noises independent -- so its marginal factorizes on its
+    own, over exactly the mechanisms producing inside it. Everything else is not summed
+    away, it is never written down.
+
+    That justification is strictly stronger than the older "every factor outside the
+    closure is a conditional summing to one". The older one quietly needs a topological
+    order over the dropped factors so they can be peeled off one at a time, and a cycle
+    does not have one: `sum_{x,y} P(x|y) P(y|x)` runs over `[1, 2]`. Under C1 the two
+    arguments agree, which is why every acyclic answer is unchanged.
+
+    `without` names a mechanism the query deletes, so the walk stops at `out(m*)`: those
+    outputs become sources and nothing above them is pulled in. That is what lets a query
+    be answered while feedback runs somewhere above the knockdown, and it makes every
+    estimand cheaper -- nothing upstream of a deleted mechanism was ever needed. It must
+    not be passed for a replacement, whose kernel still reads `in(m)`.
 
     Only the factored form admits this. The hidden-variable branch is a quotient whose
     numerator is a single joint over all observed variables; it does not decompose, so
@@ -313,7 +346,7 @@ def _restrict_to_ancestry(
     if not outcomes:
         return expression, None
 
-    needed = ancestral_closure(graph, outcomes)
+    needed = ancestral_closure(graph, outcomes, without=without)
     retained = [
         factor for factor in expression.factors if factor.footprint() <= needed
     ]
@@ -354,7 +387,14 @@ def _restrict_to_ancestry(
     step = ProofStep(
         "Restrict to ancestry",
         f"P({','.join(outcomes)} | do) depends only on the ancestral closure "
-        f"{sorted(needed)}. Every factor outside it is a conditional summing to 1, so "
+        f"{sorted(needed)}"
+        + (
+            f", taken on the graph with {without!r} deleted so that nothing upstream of "
+            "the intervention is required"
+            if without is not None
+            else ""
+        )
+        + ". That set is ancestrally closed, so its marginal factorizes on its own and "
         f"{dropped} factor(s) were dropped rather than summed; "
         f"{len(summed)} variable(s) remain to marginalize.",
     )
@@ -481,7 +521,14 @@ def identify_expectation(
         absorbed = produced_by.outputs
         expectation = ConditionalExpectation(outcome, given=produced_by.inputs)
 
-    needed = ancestral_closure(graph, (outcome,))
+    # The same graph the density body was reduced on. A deletion severs `in(m*)`, so the
+    # body no longer carries the factors above it; closing over the observational graph
+    # here would leave `needed` naming variables no retained factor mentions.
+    needed = ancestral_closure(
+        graph,
+        (outcome,),
+        without=query.target if isinstance(query, DeleteMechanism) else None,
+    )
     body_expression = (
         density.expression.expression
         if isinstance(density.expression, SumOut)
@@ -497,10 +544,19 @@ def identify_expectation(
         for factor in product.factors
         if factor.footprint() <= (needed - set(absorbed))
     ]
-    # Everything in the ancestry except the outcome's own output group. The variables the
-    # expectation conditions on are summed here too: they are free *inside* the node and
-    # bound by this sum, which is what makes the result a scalar.
-    summed = tuple(sorted(needed - set(absorbed)))
+    # Summed from what the retained factors and the expectation actually mention, not from
+    # the closure -- the same guard `_restrict_to_ancestry` carries, and for the same
+    # reason: a variable no factor mentions contributes a bare `sum_v 1 = |domain(v)|`,
+    # which is a silent multiplicative error rather than a visible one. Before the
+    # post-deletion reduction the two agreed, so the closure could stand in for the
+    # mention set; now that a deletion drops its whole upstream, they do not.
+    #
+    # The variables the expectation conditions on are summed here too: they are free
+    # *inside* the node and bound by this sum, which is what makes the result a scalar.
+    mentioned: set[str] = set(expectation.footprint())
+    for factor in retained:
+        mentioned.update(factor.footprint())
+    summed = tuple(sorted(mentioned - set(absorbed)))
     body: Expression = Product([*retained, expectation])
     if summed:
         body = SumOut(summed, body)
@@ -683,7 +739,10 @@ def _identify_delete(
 ) -> IdentificationResult:
     target = graph.get_mechanism(query.target)
     _validate_outcomes(graph, query.outcomes)
-    reaching = cycles_reaching(graph, query.outcomes)
+    # Post-deletion: the target's factor becomes a policy, so a cycle strictly upstream of
+    # it can no longer reach the outcome. `_restrict_to_ancestry` below is given the same
+    # `without` and drops those factors, which is the half that makes this sound.
+    reaching = cycles_reaching(graph, query.outcomes, without=query.target)
     if reaching:
         return _unknown_cycle(graph, query, reaching)
     observed = _observed(graph, observed_variables)
@@ -747,7 +806,9 @@ def _identify_delete(
         # factor is singular -- the generic case under C2 for a mechanism whose noise carries
         # fewer degrees of freedom than it has outputs.
         product = Product([*_surviving_factors(graph, exclude=query.target), *fallbacks])
-        expression, restrict_step = _restrict_to_ancestry(product, graph, query.outcomes)
+        expression, restrict_step = _restrict_to_ancestry(
+            product, graph, query.outcomes, without=query.target
+        )
         assumptions = common + (
             Assumption(
                 "Downstream positivity",

@@ -376,10 +376,11 @@ def test_elimination_reads_far_fewer_kernels_than_enumeration() -> None:
     enumerated = _kernel_calls(evaluate, 12)
 
     assert eliminated * 100 < enumerated, (eliminated, enumerated)
-    # Every leaf factor is read once per cell of its own scope and never again: the prior
-    # on v0 (2 cells), the deletion policy on v1 (2 cells), ten interior transitions
-    # (4 cells each), and the last transition at only 2 cells because v12 is bound.
-    assert eliminated == 2 + 2 + 4 * 10 + 2
+    # Every leaf factor is read once per cell of its own scope and never again: the
+    # deletion policy on v1 (2 cells), ten interior transitions (4 cells each), and the
+    # last transition at only 2 cells because v12 is bound. The prior on v0 is not read at
+    # all -- deleting m0 severs its own input, so v0 is not in the post-deletion closure.
+    assert eliminated == 2 + 4 * 10 + 2
 
 
 def test_the_cost_gate_fires_against_an_evaluator_that_enumerates() -> None:
@@ -412,7 +413,8 @@ def test_a_sixty_link_chain_is_answerable_and_enumeration_is_not() -> None:
     model = _ChainModel(60)
     plan = plan_elimination(result.expression, model.domains)
 
-    assert plan.naive_entries == 2**60
+    # 59, not 60: v0 is upstream of the deleted mechanism and drops out of the closure.
+    assert plan.naive_entries == 2**59
     assert plan.max_entries == 4  # a chain eliminates two variables at a time
     assert plan.induced_width == 1
 
@@ -445,10 +447,14 @@ def test_the_sixty_link_answer_still_depends_on_the_intervention() -> None:
 
 def test_the_plan_reports_the_cost_before_anything_is_paid() -> None:
     """Knowing a query is unaffordable is worth more than discovering it after an hour."""
-    result = _chain_estimand(3)
-    plan = plan_elimination(result.expression, _ChainModel(3).domains)
+    # A four-link chain, because a three-link one now costs the same either way: the
+    # post-deletion closure drops v0, leaving two summed variables and a plan whose
+    # largest table and enumeration cost are both 4 -- so the summary below could not
+    # show the two numbers differing.
+    result = _chain_estimand(4)
+    plan = plan_elimination(result.expression, _ChainModel(4).domains)
 
-    assert plan.order == ("v0", "v1", "v2")
+    assert plan.order == ("v1", "v2", "v3")
     assert plan.naive_entries == 2**3
     assert plan.max_entries == 4
     assert plan.induced_width == 1
@@ -473,12 +479,19 @@ def test_the_reported_largest_table_is_the_largest_table_actually_built() -> Non
     set the maximum either way. `assert max_entries > max(leaf_entries)` is what keeps
     that from being an accident of the fixture.
     """
+    # The spacer chain `z -> a1 -> a2 -> a3` is load-bearing, not decoration. Deleting
+    # `root` severs everything above `z`, so without it the closure shrinks until there is
+    # nothing left to win: elimination and enumeration both cost 16 and `max_entries <
+    # naive_entries` stops being true of a graph that still exercises the merge.
     graph = MechanismGraph(
-        variables={"w", "z", "x1", "x2", "x3", "y"},
+        variables={"w", "z", "a1", "a2", "a3", "x1", "x2", "x3", "y"},
         mechanisms={
             "root": {"inputs": ("w",), "outputs": ("z",)},
+            "c1": {"inputs": ("z",), "outputs": ("a1",)},
+            "c2": {"inputs": ("a1",), "outputs": ("a2",)},
+            "c3": {"inputs": ("a2",), "outputs": ("a3",)},
             "hub": {"inputs": ("x1", "x2", "x3"), "outputs": ("y",)},
-            **{f"drive{i}": {"inputs": ("z",), "outputs": (f"x{i}",)} for i in (1, 2, 3)},
+            **{f"drive{i}": {"inputs": ("a3",), "outputs": (f"x{i}",)} for i in (1, 2, 3)},
         },
     )
     result = identify(graph, DeleteMechanism("root", outcomes={"y"}))
@@ -546,7 +559,11 @@ def test_the_answer_does_not_depend_on_the_elimination_order() -> None:
     from tests.conformance.generation import generate_model
 
     checked = 0
-    for seed in range(10):
+    # Twenty seeds, not ten. The post-deletion reduction makes every estimand smaller, so
+    # fewer of them have the two or more summed variables a permutation test needs; ten
+    # seeds now yield 12. Restoring the coverage is the fix -- lowering the threshold would
+    # keep the gate green while it tested half as much.
+    for seed in range(20):
         model = generate_model(seed, allow_hidden=False, shapes=("positive",))
         graph = model.graph()
         discrete = DiscreteModel(
@@ -658,7 +675,7 @@ def test_the_estimator_answers_a_query_no_joint_table_could_hold() -> None:
     est = estimate(result, data, fallbacks={"m0": policy})
 
     assert est.plan is not None
-    assert est.plan.naive_entries == 2**length
+    assert est.plan.naive_entries == 2 ** (length - 1)
     assert est.plan.max_entries <= 4
 
     low, high = _empirical_chain_truth(rows, length, policy)
@@ -791,7 +808,7 @@ def test_the_estimate_reports_what_the_query_cost() -> None:
     est = estimate(result, data, fallbacks={"m0": {(0,): 0.5, (1,): 0.5}})
 
     assert est.plan is not None
-    assert est.plan.naive_entries == 2**8
+    assert est.plan.naive_entries == 2**7
     assert "width" in est.summary()
 
 
@@ -866,9 +883,11 @@ def test_a_sparse_gene_network_is_affordable_near_the_intervention_and_not_far_f
     # -- so the numbers a reader sees were not the numbers a test checked. The network is
     # seeded, so this is reproducible rather than merely observed.
     expected = (
-        # hop: (ancestry, largest elimination table)
-        (7, 16), (16, 16), (25, 16), (98, 32), (106, 32), (111, 64),
-        (174, 1_024), (292, 2**25), (381, 2**37),
+        # hop: (ancestry, largest elimination table), on the *post-deletion* closure.
+        # Hop 0 is the target's own output, so the estimand is the policy alone: one
+        # variable, one cell. Every other row lost the target's inputs and their ancestry.
+        (1, 1), (10, 16), (19, 16), (93, 32), (101, 32), (106, 64),
+        (171, 512), (291, 2**24), (380, 2**41),
     )
     assert tuple(near) + tuple(far) == expected, (near, far)
 

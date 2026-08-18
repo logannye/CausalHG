@@ -430,24 +430,18 @@ def test_a_mechanism_with_no_outputs_supplies_no_kernel() -> None:
     assert relevant_mechanisms(graph, ()) == frozenset({"m1"})
 
 
-def test_the_upstream_cycle_refinement_is_not_safe_yet() -> None:
-    """A tempting weakening of the check, and the reason it is not taken.
+def test_the_upstream_cycle_carve_out_is_safe_only_because_the_factors_are_dropped() -> None:
+    """The carve-out, and the arithmetic that says what it had to avoid.
 
-    A deletion severs the target's own cycle, so on the *post-deletion* graph a cycle
-    strictly upstream of the intervention is unreachable and the query looks answerable --
-    which would be a valuable carve-out, since feedback upstream of a knockdown is the
-    normal case in biology.
+    A deletion severs the target's incoming edges, so on the post-deletion graph a cycle
+    strictly upstream of the intervention cannot reach the outcome. Taking that carve-out
+    required two changes at once: the cycle check walks the post-deletion graph, *and*
+    `_restrict_to_ancestry` closes over it too, so the cyclic factors are never emitted.
 
-    It is unsound as the code stands. `_restrict_to_ancestry` computes its closure on the
-    *observational* graph, so it keeps the cyclic factors, and a cyclic product does not
-    integrate to one: `sum_{x,y} P(x|y) P(y|x)` runs over `[1, 2]` on random binary joints,
-    so the estimand can be wrong by a factor of two. Taking the carve-out needs the
-    reduction to drop those factors too, justified by the post-*intervention* law rather
-    than by "every factor outside the closure integrates to one" -- the sentence that stops
-    being true under cycles.
-
-    This test fails if the check is weakened without that, which is the only way the trap
-    gets remembered.
+    Doing only the first would identify the query while keeping `P(X | Y) * P(Y | X)` in
+    the estimand, and a cyclic product does not integrate to one -- the loop below measures
+    it running up to ~2 on random binary joints. So the query is answered, and the
+    assertion that matters is about what the answer does *not* contain.
     """
     graph = MechanismGraph(
         variables={"X", "Y", "Z", "W"},
@@ -460,12 +454,14 @@ def test_the_upstream_cycle_refinement_is_not_safe_yet() -> None:
     )
     result = identify(graph, DeleteMechanism("m3", outcomes={"W"}))
 
-    assert not isinstance(result, Identified), (
-        "if this now identifies, check that the emitted estimand does not carry "
-        f"P(X | Y) * P(Y | X): {getattr(result, 'expression', None)}"
-    )
+    assert isinstance(result, Identified), result
+    # The whole point: the loop's factors are gone, not summed.
+    rendered = str(result.expression)
+    assert not ({"X", "Y"} & result.expression.footprint()), rendered
+    assert "P(X" not in rendered and "P(Y" not in rendered, rendered
 
-    # The arithmetic that makes it unsound, so the reason is checked and not just asserted.
+    # The arithmetic that says why keeping them would have been unsound. Retained because
+    # it is the reason the reduction had to change, not merely the check.
     rng = np.random.default_rng(7)
     totals = []
     for _ in range(4000):
@@ -598,3 +594,114 @@ def test_partial_solvability_biases_kernels_the_cycle_cannot_reach() -> None:
     assert abs(slope(y[solvable], x[solvable]) - 1.0) > 0.2
     assert abs(slope(x[solvable], s[solvable]) - 1.0) > 0.2
     assert s[solvable].mean() > 0.3
+
+
+# --- feedback upstream of the intervention ----------------------------------------
+
+
+def _knockdown_with_upstream_loop() -> MechanismGraph:
+    """`a <-> b` feeding a knockdown, which feeds a readout.
+
+    The shape of an ordinary perturbation experiment: a regulatory loop somewhere upstream,
+    a mechanism knocked down, a readout a hop or two below it.
+    """
+    return MechanismGraph(
+        variables={"a", "b", "TF", "target", "readout"},
+        mechanisms={
+            "loop1": {"inputs": ("a",), "outputs": ("b",)},
+            "loop2": {"inputs": ("b",), "outputs": ("a",)},
+            "m_tf": {"inputs": ("b",), "outputs": ("TF",)},
+            "m_kd": {"inputs": ("TF",), "outputs": ("target",)},
+            "m_out": {"inputs": ("target",), "outputs": ("readout",)},
+        },
+    )
+
+
+def test_a_cycle_strictly_upstream_of_the_intervention_identifies() -> None:
+    """Deleting a mechanism severs everything above it, loop included.
+
+    `delete(m_kd)` replaces `target`'s factor with a policy, so `target` stops depending on
+    `TF` and nothing above `TF` can reach `readout` any more. The loop is upstream of a cut
+    edge, which makes it as irrelevant as a loop in another component.
+    """
+    result = identify(
+        _knockdown_with_upstream_loop(), DeleteMechanism("m_kd", outcomes={"readout"})
+    )
+
+    assert isinstance(result, Identified), result
+    assert str(result.expression) == "sum_{target} P(readout | target) * P0_m_kd(target)"
+
+
+def test_the_upstream_estimand_carries_no_factor_from_the_cycle() -> None:
+    """The trap, asserted directly on the emitted formula.
+
+    A cyclic product does not integrate away -- `sum_{x,y} P(x|y) P(y|x)` runs over
+    `[1, 2]` -- so identifying this query while still emitting the loop's factors would be
+    wrong by up to a factor of two. The reduction has to *drop* them, justified by the
+    post-intervention law rather than by "every factor outside the closure sums to one".
+    """
+    result = identify(
+        _knockdown_with_upstream_loop(), DeleteMechanism("m_kd", outcomes={"readout"})
+    )
+    assert isinstance(result, Identified), result
+
+    rendered = str(result.expression)
+    assert not ({"a", "b", "TF"} & result.expression.footprint()), rendered
+    for absent in ("P(a", "P(b", "P(TF", "| a)", "| b)", "| TF)"):
+        assert absent not in rendered, rendered
+
+
+def test_the_upstream_cycle_answer_is_numerically_exact() -> None:
+    """Sufficiency, measured, on a system whose fixed point is solved in closed form.
+
+    Structural: `b = p a + u_b`, `a = q b + u_a` (a genuine two-cycle), `TF = r b + u_tf`,
+    `target = s TF + u_t`, `readout = w target + u_r`. Deleting `m_kd` draws `target` from
+    a policy, so the truth is `w^2 Var(P0) + Var(u_r)` -- and the estimand must recover it
+    from the *observational* `P(readout | target)` while the loop is still running.
+    """
+    rng = np.random.default_rng(11)
+    n = 400_000
+    p, q, r, s, w = 0.6, 0.5, 0.8, 0.9, 0.4
+
+    u_a, u_b, u_tf, u_t, u_r = (rng.normal(0, 1, n) for _ in range(5))
+    a = (u_a + q * u_b) / (1 - p * q)
+    b = (p * u_a + u_b) / (1 - p * q)
+    assert np.abs(b - (p * a + u_b)).max() < 1e-9
+    assert np.abs(a - (q * b + u_a)).max() < 1e-9
+
+    tf = r * b + u_tf
+    target = s * tf + u_t
+    readout = w * target + u_r
+
+    # What the estimand reads: the observational conditional of the readout on the target.
+    slope = np.cov(readout, target)[0, 1] / np.var(target)
+    residual = np.var(readout - slope * target)
+    assert slope == pytest.approx(w, abs=5e-3), "the loop must not bias m_out's kernel"
+    assert residual == pytest.approx(1.0, abs=1e-2)
+
+    policy_variance = 3.0
+    estimand = slope**2 * policy_variance + residual
+    truth = w**2 * policy_variance + 1.0
+    assert estimand == pytest.approx(truth, rel=2e-2)
+
+
+def test_a_cycle_the_deletion_does_not_sever_is_still_refused() -> None:
+    """The carve-out is for cycles the intervention cuts off, not for cycles generally.
+
+    Here the loop sits *between* the knockdown and the readout, so it survives the deletion
+    and its kernels are still required. For a mechanism on a cycle the observational
+    conditional is not its structural kernel, so this must stay a refusal.
+    """
+    graph = MechanismGraph(
+        variables={"TF", "target", "L1", "L2", "readout"},
+        mechanisms={
+            "m_kd": {"inputs": ("TF",), "outputs": ("target",)},
+            "loop1": {"inputs": ("target", "L2"), "outputs": ("L1",)},
+            "loop2": {"inputs": ("L1",), "outputs": ("L2",)},
+            "m_out": {"inputs": ("L1",), "outputs": ("readout",)},
+        },
+    )
+    result = identify(graph, DeleteMechanism("m_kd", outcomes={"readout"}))
+
+    assert not isinstance(result, Identified), result
+    assert "cycl" in getattr(result, "reason", "").lower()
