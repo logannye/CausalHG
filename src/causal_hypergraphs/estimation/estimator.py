@@ -364,6 +364,61 @@ def _percentile(sorted_values: Sequence[float], fraction: float) -> float:
     return sorted_values[lower] * (1.0 - weight) + sorted_values[upper] * weight
 
 
+def _check_policy_support(
+    identified: Identified,
+    fallbacks: Mapping[str, Mapping[Point, float]] | None,
+    domains: Mapping[str, tuple[Any, ...]],
+) -> None:
+    """Refuse a deletion policy whose mass sits on levels these data cannot represent.
+
+    `_evaluate_over_scope` walks the product of the *observed* domains, so an output level
+    absent from the data is never visited. A policy putting mass there would have that mass
+    silently dropped: the returned law sums to less than one while every positivity
+    certificate reads PASS, because positivity is a property of the conditioning cells the
+    evaluator touched and this mass is at a point it never touched. That is a wrong number
+    carrying a clean report, which is the one outcome this module exists to prevent.
+
+    The policy is a *declaration* -- it says what the intervention installs -- so a mismatch
+    with the data's support is the caller's to resolve, not the estimator's to absorb. The
+    dual direction is already refused: `EmpiricalModel.fallback` raises `MissingKernel` for
+    a domain level the table has no entry for. This closes the other side.
+
+    Only positive mass is refused. Spelling the unreachable keys out as `0.0` is how the
+    coupled policies in this repo are already written, and drops nothing.
+
+    Marginalized outputs are skipped by construction rather than by a flag: they are summed
+    inside the node and no domain is required of anyone, so they are exactly the key
+    positions whose name `domains` does not carry.
+    """
+    if not fallbacks:
+        return
+    for kernel in identified.expression.kernels():
+        if kernel.kind != "fallback":
+            continue
+        mechanism = kernel.label.removeprefix("P0_")
+        table = fallbacks.get(mechanism)
+        if table is None:
+            continue
+        checkable = [
+            (position, name)
+            for position, name in enumerate(kernel.variables)
+            if name in domains
+        ]
+        for key, mass in table.items():
+            if mass <= 0.0:
+                continue
+            for position, name in checkable:
+                if position < len(key) and key[position] not in domains[name]:
+                    raise UnsupportedEstimand(
+                        f"Policy P0_{mechanism} puts mass {mass} on {name}={key[position]!r}, "
+                        f"which these data never show: the observed domain of {name!r} is "
+                        f"{list(domains[name])}. Evaluation ranges over the observed domains, "
+                        f"so that mass would be dropped and the estimated law would silently "
+                        f"fail to sum to one. Either pass `domains=` to the Dataset naming "
+                        f"every level the policy uses, or declare a policy these data support."
+                    )
+
+
 def estimate(
     result: IdentificationResult | Identified,
     data: Dataset,
@@ -439,9 +494,14 @@ def estimate(
 
     # Computed even when enumerating: the plan is what tells a caller that the query they
     # just paid an exponential for had a width of two.
+    # Refused before the plan is costed: a policy the data cannot represent makes every
+    # number downstream wrong, so there is nothing to price.
+    domains = with_aliases(inner, aliases).domains
+    _check_policy_support(identified, fallbacks, domains)
+
     plan = plan_elimination(
         identified.expression,
-        with_aliases(inner, aliases).domains,
+        domains,
         bound=variables,
     )
 
