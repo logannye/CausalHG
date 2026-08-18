@@ -155,6 +155,48 @@ def test_a_dataset_missing_a_variable_in_scope_raises() -> None:
     assert "D" in str(caught.value)
 
 
+def _records_with_constant(name: str) -> list[dict[str, int]]:
+    """The fixture rows restricted to those where `name` is 0, so that level is all there is.
+
+    Domain inference reads levels off the data (`dataset.py:122`), so a column that never
+    varies gets a one-element domain -- and any policy mass sitting on its missing level
+    has nowhere to land.
+    """
+    return [row for row in _records() if row[name] == 0]
+
+
+def test_policy_mass_on_a_level_the_data_never_show_raises_rather_than_vanishing() -> None:
+    """Half of P0_m1 sits on D=1. If D is never observed, that mass cannot be reached.
+
+    Dropping it silently returns a sub-probability law with every positivity certificate
+    green, which is the failure this module exists to prevent: a wrong number carrying a
+    clean report. The policy is a *declaration*, so a mismatch with the data's support is
+    the caller's to resolve, not the estimator's to absorb.
+    """
+    data = Dataset.from_records(_records_with_constant("D"))
+
+    with pytest.raises(UnsupportedEstimand) as excinfo:
+        estimate(_identified(), data, fallbacks={"m1": P0_M1})
+
+    message = str(excinfo.value)
+    assert "P0_m1" in message
+    assert "D" in message
+
+
+def test_policy_mass_of_zero_outside_the_observed_levels_is_not_refused() -> None:
+    """The check is on *mass*, not on the key: an unreachable level carrying 0.0 costs nothing.
+
+    Without this the refusal would fire on every policy that merely spells out the zeros,
+    which is the form the coupled fixture policy already uses.
+    """
+    data = Dataset.from_records(_records_with_constant("D"))
+    reachable = {(0, 0): 0.4, (0, 1): 0.0, (1, 0): 0.6, (1, 1): 0.0}
+
+    est = estimate(_identified(), data, fallbacks={"m1": reachable})
+
+    assert sum(est.values.values()) == pytest.approx(1.0, abs=1e-12)
+
+
 # --- certificate discharge --------------------------------------------------------
 
 
