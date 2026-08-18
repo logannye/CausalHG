@@ -46,7 +46,7 @@ Theorem T6 extends T4 to hidden-variable HADMGs under a clean boundary condition
 
 We commit explicitly to four conventions in v1: mechanism-level acyclicity (C1), deterministic structural functions with explicit per-mechanism noise (C2), bipartite role typing — each hyperedge has only an input/output partition (C3), and a single producer per variable (C4). Cyclic hypergraph SCMs, Markov-kernel mechanisms, richer role typing (substrate / enzyme / product), and mechanism-correlated noise are flagged as future extensions; the relevant prior work is reviewed in §3.
 
-A reference implementation in Python (~800 lines, NumPy only) reproduces every numerical claim in this paper to within sampling tolerance. Five test suites comprising 60 tests verify structural sanity, all three intervention regimes, T1's d*-separation predictions, T2/T3's truncated factorizations, T4's asymmetry under latent confounding, and T6's behavior with a hidden variable.
+A reference implementation in Python (~800 lines, NumPy only) reproduces every numerical claim in this paper to within sampling tolerance. Five test suites comprising 62 tests verify structural sanity, all three intervention regimes, T1's d*-separation predictions, T2/T3's truncated factorizations, T4's asymmetry under latent confounding, and T6's behavior with a hidden variable.
 
 ### 1.4 Roadmap
 
@@ -386,7 +386,7 @@ We have developed a reformulation of Pearl's structural causal models in which m
 
 The framework's value proposition is therefore not new expressive power but **first-class addressability**. Naming mechanisms as primary causal objects matches the structure of natural experiments (drug ablation, pathway knockout, n-ary policy intervention), simplifies the identifiability theory for those experiments, and unifies operations that Pearl can express only as multi-variable interventions or via latent-variable encoding.
 
-The principal remaining open problem is hyper-hedge completeness — the reverse direction of T7's reduction. Several natural extensions (cyclic graphs, Markov kernels, richer roles, causal abstraction, causal hypergraph transformers) are sketched in §9. The reference implementation, totaling 60 verified test cases across five suites, supports every numerical claim in this paper and is provided as supplementary material.
+The principal remaining open problem is hyper-hedge completeness — the reverse direction of T7's reduction. Several natural extensions (cyclic graphs, Markov kernels, richer roles, causal abstraction, causal hypergraph transformers) are sketched in §9. The reference implementation, totaling 62 verified test cases across five suites, supports every numerical claim in this paper and is provided as supplementary material.
 
 The framework is small but, we believe, foundational. Its core technical content fits in a single paper; its extensions could occupy several more.
 
@@ -451,7 +451,7 @@ Yao, J., & Evans, R. J. (2022). Regression identifiability and edge intervention
 
 ## Appendix A. Reference implementation
 
-A Python implementation of v1 conventions is provided in `minimal_model/`. Approximately 800 lines, NumPy-only, no other dependencies. Public API: `HypergraphSCM`, `Mechanism`, `Factor`, `reaction_network()`, `reaction_network_with_latent_BE()`, `reaction_network_with_hidden_W()`, `d_separated()`, `deterministic_closure()`. Five test suites totaling 60 tests verify every numerical claim in this paper.
+A Python implementation of v1 conventions is provided in `minimal_model/`. Approximately 800 lines, NumPy-only, no other dependencies. Public API: `HypergraphSCM`, `Mechanism`, `Factor`, `reaction_network()`, `reaction_network_with_latent_BE()`, `reaction_network_with_hidden_W()`, `d_separated()`, `deterministic_closure()`. Five test suites totaling 62 tests verify every numerical claim in this paper.
 
 Run: `python -m minimal_model.test_example` (and analogously for `test_dseparation`, `test_factorization`, `test_hadmg`, `test_h1_plus`).
 

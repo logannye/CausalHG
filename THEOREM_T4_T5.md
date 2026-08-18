@@ -163,7 +163,7 @@ $$
 P^{\neg m_1}(V) = P(A) \cdot P(B, E) \cdot \delta_0(C) \delta_0(D) \cdot \mathcal{N}(F; 0, \sigma_2^2).
 $$
 
-This is exactly what direct simulation of $\mathcal{M}^{\neg m_1}$ produces (verified numerically by `test_hadmg.py::test_T4_under_latent_confounding`). The latent confounding between $B$ and $E$ does not obstruct identification — it is preserved in the surviving $P(B, E)$ factor and propagates correctly to the post-intervention distribution.
+This is exactly what direct simulation of $\mathcal{M}^{\neg m_1}$ produces (verified numerically by `test_hadmg.py::test_T4_identifiable_for_observed_mechanism`). The latent confounding between $B$ and $E$ does not obstruct identification — it is preserved in the surviving $P(B, E)$ factor and propagates correctly to the post-intervention distribution.
 
 **Apply T4 to $\mathrm{do}(\neg m^{\mathrm{lat}})$ — intervening on the latent.**
 

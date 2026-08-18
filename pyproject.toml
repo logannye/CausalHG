@@ -10,9 +10,10 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
-dependencies = [
-  "numpy>=1.24",
-]
+# The shipped package imports nothing but the standard library; `src/` has no `numpy`
+# import anywhere. NumPy is needed by `minimal_model/` (not shipped) and by parts of the
+# test suite, so it belongs in the dev extra rather than being imposed on every install.
+dependencies = []
 
 [tool.hatch.build.targets.wheel]
 # Declared rather than inferred: the distribution name is `causal-hypergraphs` and the
@@ -21,6 +22,7 @@ packages = ["src/causal_hypergraphs"]
 
 [project.optional-dependencies]
 dev = [
+  "numpy>=1.24",
   "pytest>=8",
   "ruff>=0.7",
   "pyright>=1.1",
