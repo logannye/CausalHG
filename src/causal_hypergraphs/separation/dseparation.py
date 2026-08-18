@@ -16,11 +16,17 @@ Reachability, not path enumeration
 
 Determination is handled set-wise
     A variable functionally determined by the conditioning set is constant given it, so
-    it may be added to the conditioning set and removed from the query sets. Both moves
-    are exact, not conservative: conditioning on a deterministic function of Z leaves
-    every conditional law unchanged. What is *not* sound is concluding separation because
-    *some* element of X is determined -- the undetermined remainder of X can still be
-    d-connected to Y.
+    it may be added to the conditioning set and removed from the query sets. These are
+    Steps 4 and 5 of THEOREM_T1.md 3, and both are exact rather than conservative:
+    conditioning on a deterministic function of Z leaves every conditional law unchanged.
+    What is *not* sound is concluding separation because *some* element of X is
+    determined -- the undetermined remainder of X can still be d-connected to Y.
+
+    Both steps rest on the declared rules being **valid** (every declared equality really
+    holds in the model). That is a hypothesis on the model description, not something
+    this module can check, since it never sees the structural functions. It is also the
+    only place validity is used: how *complete* the rule set is affects what can be
+    proved, never whether what is proved is true.
 """
 from __future__ import annotations
 
