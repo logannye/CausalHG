@@ -82,7 +82,9 @@ class UnsupportedEstimand(EstimationError):
 # checked, which is the safe default: a certificate wrongly listed here would be announced
 # as verified without being verified, whereas one wrongly omitted is merely conservative.
 # `test_discharged_codes_are_codes_the_compiler_emits` pins these against the compiler.
-DISCHARGEABLE_CODES = frozenset({"Target positivity", "Downstream positivity"})
+DISCHARGEABLE_CODES = frozenset(
+    {"Target positivity", "Downstream positivity", "Backend positivity"}
+)
 
 
 @dataclass(frozen=True)

@@ -30,8 +30,12 @@ from tests.conformance.generation import RandomModel, generate_model
 
 MODEL_COUNT = 220
 
-# Assumptions whose failure legitimately makes an estimand unevaluable.
-POSITIVITY_CODES = frozenset({"Target positivity", "Downstream positivity"})
+# Assumptions whose failure legitimately makes an estimand unevaluable. `Backend positivity`
+# is the T7/Pearl branch's form of the same certificate; this sweep does not enable T7, but
+# the predicate must not go stale relative to what the compiler can emit.
+POSITIVITY_CODES = frozenset(
+    {"Target positivity", "Downstream positivity", "Backend positivity"}
+)
 
 
 def _discrete_model(model: RandomModel, target: str, *, with_replacement: bool) -> DiscreteModel:
