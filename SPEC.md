@@ -126,6 +126,13 @@ elimination; both must return the same value, and the same kernel cells must be 
 either way, since the positivity certificates that come due are defined as the cells the
 evaluator touched.
 
+An identifying formula may introduce a **copied variable** -- a second, independent name
+for one already in the graph, needed when an inner sum would otherwise capture a value
+bound outside it. `Identified.aliases` records what each copy stands for, and
+`semantics.with_aliases` makes a model answer for it by looking the copy up under its base,
+**per kernel**. A copy never appears in `scope()`, so no caller is asked to bind one, and
+`estimate` resolves aliases before the column check.
+
 String rendering is for human inspection only. Tests that assert compiler
 semantics should prefer AST properties when possible.
 

@@ -384,7 +384,6 @@ CORE_T7_ASSUMPTIONS = (
 T7_ASSUMPTIONS = (
     Assumption("T7 reduction", "Boundary-violating mechanism query is reduced to Pearl ID."),
     Assumption("Stochastic deletion", "Mechanism deletion inserts fallback factors for outputs."),
-    Assumption("Single-output target", "Current T7 vertical slice supports one target output."),
 )
 
 
@@ -591,12 +590,6 @@ def identify_delete_via_t7(
             graph, query, hidden_outputs, missing_boundary
         )
 
-    if len(target.outputs) != 1:
-        return Unknown(
-            reason="Current T7 vertical slice supports one target output.",
-            next_algorithm="Generalize stochastic-intervention composition.",
-            missing_variables=missing_boundary,
-        )
     unknown_outcomes = set(query.outcomes) - observed
     if unknown_outcomes:
         return Unknown(
@@ -632,9 +625,23 @@ def identify_delete_via_t7(
     )
     if not isinstance(pearl_result, Identified):
         return Unknown(
-            reason="Pearl backend did not identify the reduced T7 effect.",
-            next_algorithm="Complete Pearl ID and hedge extraction.",
-            suggestions=("Keep this case as Unknown until a real hedge witness is available.",),
+            reason=(
+                "The reduced Pearl query is not identifiable in the latent projection. "
+                "That is reported as Unknown rather than Unidentified deliberately: a "
+                "hedge refutes identifiability over ALL semi-Markovian models of the "
+                "ADMG, and this projection's preimage is a strictly smaller class -- one "
+                "noise per mechanism whose children are exactly out(m), single producers, "
+                "declared output equalities. The mechanism query is also a MIXTURE against "
+                "a policy the caller supplies, and each term failing does not make the "
+                "mixture fail. Lifting the refutation across the projection is exactly "
+                "conjecture H1+, which THEOREM_H1_PLUS.md marks open."
+            ),
+            next_algorithm="Prove H1+, or refute the mechanism query directly.",
+            suggestions=(
+                f"Pearl-level obstruction: {getattr(pearl_result, 'witness', None)}. "
+                "That is evidence about the projected ADMG, not a proof about the "
+                "mechanism query.",
+            ),
             missing_variables=missing_boundary,
             derivation=(
                 ProofStep(
@@ -642,10 +649,14 @@ def identify_delete_via_t7(
                     f"Hidden boundary variables: {list(missing_boundary)}.",
                 ),
                 ProofStep("Pearl reduction", f"Backend result status: {pearl_result.status}."),
+                ProofStep(
+                    "Withhold the refutation",
+                    "A hedge in the projection is not by itself a proof about the "
+                    "mechanism query; see H1+.",
+                ),
             ),
         )
 
-    target_output = target.outputs[0]
     expression = SumOut(
         target.outputs,
         Product([Fallback(query.target, target.outputs), pearl_result.expression]),
@@ -653,18 +664,29 @@ def identify_delete_via_t7(
     return Identified(
         expression=expression,
         theorem="T7",
+        # The Pearl sub-result may have introduced copied variables. Composing its
+        # expression while dropping its aliases would hand the caller a formula naming
+        # something nothing can resolve -- the same defect the aliases exist to fix.
+        aliases=pearl_result.aliases,
         assumptions=T7_ASSUMPTIONS + pearl_result.assumptions,
         derivation=(
             ProofStep("Boundary check", f"Hidden boundary variables: {list(missing_boundary)}."),
             ProofStep(
                 "Reduce to Pearl ID",
-                f"Deleted output {target_output!r} becomes Pearl intervention variable.",
+                f"delete({query.target}) installs an unconditional policy over "
+                f"{list(target.outputs)}, so P(Y | delete) = sum_x P0(x) P(Y | do(x)) -- "
+                "the policy does not read in(m), so it factors out of the truncated "
+                "factorization and each term is a Pearl query on the latent projection.",
             ),
             ProofStep(
                 "Pearl backend",
                 f"Reduced effect identified by {pearl_result.theorem}.",
             ),
-            ProofStep("Compose deletion", f"Marginalize fallback factor P0({target_output})."),
+            ProofStep(
+                "Compose deletion",
+                f"Sum the Pearl term against P0_{query.target}"
+                f"({','.join(target.outputs)}).",
+            ),
         ),
     )
 

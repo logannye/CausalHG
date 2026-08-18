@@ -51,12 +51,11 @@ def test_t7_frontdoor_deletion_path_identifies_when_enabled() -> None:
     assert isinstance(result, Identified)
     assert result.theorem == "T7"
     assert str(result.expression) == (
-        "sum_{X} P0_m_x(X) * "
-        "sum_{Z} P(Z | X) * sum_{X_prime} P(X_prime) * P(Y | X_prime,Z)"
+        "sum_{X} P0_m_x(X) * sum_{X_prime,Z} P(X_prime) * P(Y | X_prime,Z) * P(Z | X)"
     )
     assert result.expression.scope() == frozenset({"Y"})
+    assert result.aliases == {"X_prime": "X"}
     assert any(assumption.code == "T7 reduction" for assumption in result.assumptions)
-    assert any(assumption.code == "Front-door" for assumption in result.assumptions)
     assert result.derivation[2].label == "Pearl backend"
 
 

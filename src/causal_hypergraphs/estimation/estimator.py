@@ -49,6 +49,7 @@ from causal_hypergraphs.semantics import (
     eliminate,
     evaluate,
     plan_elimination,
+    with_aliases,
 )
 
 from .dataset import Dataset, DatasetError, Point
@@ -298,7 +299,7 @@ def _evaluator(method: str, max_entries: int) -> Evaluator:
 
 def _evaluate_over_scope(
     identified: Identified,
-    model: _AuditingModel,
+    model: Model,
     variables: tuple[str, ...],
     evaluator: Evaluator,
 ) -> tuple[dict[Point, float], dict[tuple[str, Point], SupportFailure]]:
@@ -413,7 +414,14 @@ def estimate(
     # `footprint` additionally covers variables the estimand *sums over*, which the model
     # must still supply domains for even though no caller ever binds them.
     variables = tuple(sorted(identified.expression.scope()))
-    footprint = tuple(sorted(identified.expression.footprint()))
+    # A copied variable is a second name for one that is in the data, so the column check
+    # and the model are built over what it copies. Without this an identifying formula that
+    # needed a fresh name -- the `x'` of the front-door estimand -- would be refused as
+    # referencing a column no dataset has, which is a formula the library itself emitted.
+    aliases = identified.aliases
+    footprint = tuple(
+        sorted({aliases.get(name, name) for name in identified.expression.footprint()})
+    )
 
     missing = [name for name in footprint if name not in data.variables]
     if missing:
@@ -431,11 +439,18 @@ def estimate(
 
     # Computed even when enumerating: the plan is what tells a caller that the query they
     # just paid an exponential for had a width of two.
-    plan = plan_elimination(identified.expression, inner.domains, bound=variables)
+    plan = plan_elimination(
+        identified.expression,
+        with_aliases(inner, aliases).domains,
+        bound=variables,
+    )
 
-    model = _AuditingModel(inner, data)
+    # Aliases resolve outermost, so everything below records base names: the audit that
+    # discharges positivity certificates counts strata of real columns, never of copies.
+    auditing = _AuditingModel(inner, data)
+    model = with_aliases(auditing, aliases)
     values, failures = _evaluate_over_scope(identified, model, variables, evaluator)
-    min_count, thinnest = _thinnest_stratum(inner, model.strata)
+    min_count, thinnest = _thinnest_stratum(inner, auditing.strata)
 
     checked = tuple(
         sorted(
@@ -527,7 +542,7 @@ def _bootstrap_interval(
         inner = EmpiricalModel(
             replicate, footprint, fallbacks=fallbacks, replacements=replacements
         )
-        model = _AuditingModel(inner, replicate)
+        model = with_aliases(_AuditingModel(inner, replicate), identified.aliases)
         for point in points:
             assignment = dict(zip(variables, point, strict=True))
             try:

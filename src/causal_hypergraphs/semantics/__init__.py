@@ -4,6 +4,7 @@
 enumerating what the expression ranges over. `eliminate` returns the same number by a
 cheaper route, and is verified against `evaluate` rather than trusted on its own.
 """
+from .alias import AliasModel, with_aliases
 from .discrete import (
     Assignment,
     DiscreteModel,
@@ -23,6 +24,7 @@ from .elimination import (
 
 __all__ = [
     "DEFAULT_MAX_ENTRIES",
+    "AliasModel",
     "Assignment",
     "DiscreteModel",
     "EliminationPlan",
@@ -34,4 +36,5 @@ __all__ = [
     "eliminate",
     "evaluate",
     "plan_elimination",
+    "with_aliases",
 ]
