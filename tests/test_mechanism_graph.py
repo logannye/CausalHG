@@ -3,15 +3,23 @@ import pytest
 from causal_hypergraphs import Mechanism, MechanismGraph
 
 
-def test_c1_cyclic_mechanism_graph_rejects() -> None:
-    with pytest.raises(ValueError, match="C1 violation"):
-        MechanismGraph(
-            variables={"A", "B"},
-            mechanisms={
-                "m1": {"inputs": {"B"}, "outputs": {"A"}},
-                "m2": {"inputs": {"A"}, "outputs": {"B"}},
-            },
-        )
+def test_a_cyclic_mechanism_graph_is_built_and_reports_its_cycle() -> None:
+    """C1 used to be a construction-time veto. It is now a per-query condition.
+
+    The graph is a legitimate object -- most regulatory networks have a feedback loop, and
+    rejecting the whole thing meant no question about any part of it could be asked. What
+    a cycle costs is checked where it is actually spent: see `test_cyclic_graphs.py`.
+    """
+    graph = MechanismGraph(
+        variables={"A", "B"},
+        mechanisms={
+            "m1": {"inputs": {"B"}, "outputs": {"A"}},
+            "m2": {"inputs": {"A"}, "outputs": {"B"}},
+        },
+    )
+
+    assert not graph.is_mechanism_acyclic()
+    assert graph.cyclic_mechanisms == frozenset({"m1", "m2"})
 
 
 def test_c4_multi_producer_graph_rejects() -> None:

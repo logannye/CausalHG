@@ -83,6 +83,161 @@ def _theorem(
     return "T6"
 
 
+SOLVABILITY = Assumption(
+    "Solvability",
+    "The cyclic system has a unique solution for almost every noise draw, so that it "
+    "denotes a distribution at all. Under C1 this is free -- the law is defined by "
+    "sampling in topological order, which is total. Without C1 there is no such "
+    "procedure: the law is the pushforward of the noise through the solution of "
+    "V = F(V, U), which may have none or many. Not checkable from incidence, and this "
+    "compiler never sees F, so it is recorded rather than verified.",
+)
+
+
+def _core_assumptions(graph: MechanismGraph) -> tuple[Assumption, ...]:
+    """C1-C4, with C1 restated as a per-query fact and solvability added where it is not free.
+
+    On an acyclic graph nothing changes. On a cyclic one, C1 no longer holds globally, so
+    claiming it would be false; what the answer actually rests on is that the query's own
+    closure is acyclic, which `cycles_reaching` checked, plus the solvability the law needs
+    in order to exist.
+    """
+    if graph.is_mechanism_acyclic():
+        return CORE_ASSUMPTIONS
+    restated = tuple(
+        Assumption(
+            "C1 (local)",
+            "The mechanism graph is cyclic, but no mechanism on a cycle supplies a kernel "
+            "this query needs. Lemma 1.1 is applied only to the query's own ancestral "
+            "closure, which is acyclic.",
+        )
+        if item.code == "C1"
+        else item
+        for item in CORE_ASSUMPTIONS
+    )
+    return restated + (SOLVABILITY,)
+
+
+def relevant_mechanisms(
+    graph: MechanismGraph, outcomes: tuple[str, ...], without: str | None = None
+) -> frozenset[str]:
+    """The mechanisms whose *kernels* the estimand for `outcomes` actually needs.
+
+    Exactly those whose outputs lie inside the ancestral closure, excluding `without` --
+    the intervention target, whose factor is replaced rather than read. With no outcomes
+    the query is the full joint and every producing mechanism is needed.
+
+    Kernels, not factors. The estimand may still carry a factor for a mechanism it does not
+    need: a conditional integrates to one over its own outputs whatever its values are, so
+    a factor that is summed away contributes nothing and its kernel can be wrong with no
+    effect. That is why this is keyed on the post-deletion closure rather than on which
+    factors survive the ancestral reduction.
+    """
+    producing = frozenset(
+        name
+        for name in graph.mechanisms
+        if graph.get_mechanism(name).outputs and name != without
+    )
+    if not outcomes:
+        return producing
+    needed = ancestral_closure(graph, outcomes, without=without)
+    return frozenset(
+        name
+        for name in producing
+        if frozenset(graph.get_mechanism(name).outputs) <= needed
+    )
+
+
+def cycles_reaching(
+    graph: MechanismGraph, outcomes: tuple[str, ...], without: str | None = None
+) -> tuple[str, ...]:
+    """Mechanisms on a cycle whose kernel the query needs. Empty when the query is safe.
+
+    This is what replaced C1. Lemma 1.1 needs acyclicity of the sub-system it is applied
+    to, and an ancestrally-closed set is self-contained -- its variables depend only on
+    their own ancestors, and C2 makes the noises independent -- so its marginal factorizes
+    on its own. A cycle the query cannot reach is irrelevant to it.
+
+    The check is a single intersection because a cycle cannot be half-relevant: if one of
+    its mechanisms has its outputs inside the closure then every other mechanism on the
+    cycle is an ancestor of that one, so the closure contains the whole cycle.
+
+    `without` names a mechanism whose kernel the intervention replaces, so that the walk
+    can be taken in the post-deletion graph. It is **not** used by the identifier, and the
+    reason is worth stating because the refinement it enables is genuinely tempting.
+
+    A deletion severs the target's cycle, so on the post-deletion graph a cycle strictly
+    upstream of the intervention is unreachable and the query looks answerable. It is not,
+    as the code stands: `_restrict_to_ancestry` computes its own closure on the
+    *observational* graph and therefore keeps the cyclic factors, and their product does
+    not integrate away. `sum_{x,y} P(x|y) P(y|x)` ranges over `[1, 2]` on random binary
+    joints, so the estimand can be wrong by a factor of two.
+
+    Weakening the check to use this therefore requires `_restrict_to_ancestry` to drop
+    those factors as well -- justified by the post-*intervention* law factorizing over the
+    post-intervention graph, rather than by the current "every factor outside the closure
+    integrates to one", which is exactly the sentence that stops being true under cycles.
+    `test_the_upstream_cycle_refinement_is_not_safe_yet` holds the door shut.
+    """
+    return tuple(
+        sorted(graph.cyclic_mechanisms & relevant_mechanisms(graph, outcomes, without))
+    )
+
+
+def _unknown_cycle(
+    graph: MechanismGraph, query: DeleteMechanism | ReplaceMechanism, cyclic: tuple[str, ...]
+) -> Unknown:
+    """Refuse a query whose answer would need the kernel of a mechanism on a cycle.
+
+    For such a mechanism the observational conditional is *not* its structural kernel --
+    its outputs and its inputs are mutually determined, so the conditional mixes both
+    directions. Applying the truncated factorization anyway is wrong by a wide margin, not
+    by a rounding error: on the two-cycle `X = aY + u1`, `Y = bX + u2` it misses the
+    post-deletion variance by 68%.
+
+    Worse than wrong, for a target *on* the cycle it is unfixable. Thousands of parameter
+    settings for that two-cycle share an observational law and disagree after the deletion,
+    some with the opposite sign, so no formula in the observational law can answer it. That
+    is stated in the reason rather than raised to `Unidentified`, because the witness is a
+    proof about that graph and this refusal covers a wider class than it has been proved for.
+    """
+    on_cycle = tuple(sorted(frozenset(cyclic) & graph.cyclic_mechanisms))
+    target_is_on_it = query.target in on_cycle
+    return Unknown(
+        reason=(
+            f"The query needs the kernel of {list(on_cycle)}, which lie on a cycle of the "
+            "mechanism graph. For a mechanism on a cycle the observational conditional is "
+            "not its structural kernel -- its inputs and outputs are mutually determined -- "
+            "so the truncated factorization does not identify it."
+            + (
+                f" {query.target!r} is itself on the cycle, and for that shape there is "
+                "nothing in the observational law to identify the answer with: on the "
+                "two-cycle the models sharing an observational law form a curve along "
+                "which the post-deletion variance is unbounded and the covariance takes "
+                "both signs. Unlike a policy-relabelling argument this one has no escape "
+                "-- it varies structural parameters, so a degenerate policy does not "
+                "rescue it."
+                if target_is_on_it
+                else ""
+            )
+        ),
+        next_algorithm="Identification for cyclic SCMs (sigma-separation; simple SCMs).",
+        suggestions=(
+            f"Ask about an outcome whose ancestry avoids {list(on_cycle)}.",
+            "Cycles elsewhere in the graph are not an obstacle; only ones the query reaches.",
+        ),
+        missing_variables=on_cycle,
+        assumptions=CORE_ASSUMPTIONS,
+        derivation=(
+            ProofStep(
+                "Cycle check",
+                f"Mechanisms on a cycle: {sorted(graph.cyclic_mechanisms)}; needed by this "
+                f"query: {list(on_cycle)}.",
+            ),
+        ),
+    )
+
+
 def _validate_outcomes(graph: MechanismGraph, outcomes: tuple[str, ...]) -> None:
     unknown = tuple(sorted(set(outcomes) - graph.variable_set))
     if unknown:
@@ -92,7 +247,9 @@ def _validate_outcomes(graph: MechanismGraph, outcomes: tuple[str, ...]) -> None
         )
 
 
-def ancestral_closure(graph: MechanismGraph, outcomes: object) -> frozenset[str]:
+def ancestral_closure(
+    graph: MechanismGraph, outcomes: object, without: str | None = None
+) -> frozenset[str]:
     """The variables `outcomes` can depend on: their ancestry in the mechanism graph.
 
     Walks backwards from each outcome through its producing mechanism, adding that
@@ -103,6 +260,11 @@ def ancestral_closure(graph: MechanismGraph, outcomes: object) -> frozenset[str]
 
     Everything outside this set is irrelevant to `P(outcomes | do)` and can be dropped
     rather than summed, which is what makes a marginal query cheap.
+
+    `without` names a mechanism to walk as if it were absent: its outputs become sources,
+    and neither they nor its inputs pull anything further in. That is the *post-deletion*
+    graph, and it is the right one for asking which kernels an answer needs -- a deletion
+    replaces the target's factor with a policy, so nothing upstream of it is required.
     """
     wanted = _observed(graph, outcomes) if outcomes else frozenset()
     producer = {
@@ -118,8 +280,8 @@ def ancestral_closure(graph: MechanismGraph, outcomes: object) -> frozenset[str]
             continue
         needed.add(variable)
         name = producer.get(variable)
-        if name is None:  # exogenous: nothing upstream of it
-            continue
+        if name is None or name == without:
+            continue  # exogenous, or produced by a mechanism the intervention removes
         mechanism = graph.get_mechanism(name)
         frontier.extend(set(mechanism.outputs) | set(mechanism.inputs))
     return frozenset(needed)
@@ -516,6 +678,9 @@ def _identify_delete(
 ) -> IdentificationResult:
     target = graph.get_mechanism(query.target)
     _validate_outcomes(graph, query.outcomes)
+    reaching = cycles_reaching(graph, query.outcomes)
+    if reaching:
+        return _unknown_cycle(graph, query, reaching)
     observed = _observed(graph, observed_variables)
 
     # A hidden output nothing consumes is not an obstruction. The caller supplies a joint
@@ -556,7 +721,7 @@ def _identify_delete(
     # any observable, instead of multiplying by a 1 the reader has to verify.
     installed = tuple(sorted(set(target.outputs) - frozenset(removable)))
     fallbacks = [Fallback(query.target, installed, removable)] if installed else []
-    common = CORE_ASSUMPTIONS + (
+    common = _core_assumptions(graph) + (
         Assumption(
             "P0",
             "A joint fallback policy P0^m(out(m)) is specified for the deleted "
@@ -657,6 +822,9 @@ def _identify_replace(
 ) -> IdentificationResult:
     target = graph.get_mechanism(query.target)
     _validate_outcomes(graph, query.outcomes)
+    reaching = cycles_reaching(graph, query.outcomes)
+    if reaching:
+        return _unknown_cycle(graph, query, reaching)
     observed = _observed(graph, observed_variables)
     missing_boundary = tuple(sorted(target.boundary - observed))
     if missing_boundary:
@@ -698,7 +866,7 @@ def _identify_replace(
         )
 
     common = (
-        CORE_ASSUMPTIONS
+        _core_assumptions(graph)
         + incidence_assumptions
         + (Assumption("Observed boundary", "Target mechanism inputs and outputs are observed."),)
     )

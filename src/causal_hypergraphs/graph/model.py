@@ -172,8 +172,13 @@ class MechanismGraph:
             detail = ", ".join(f"{v}: {names}" for v, names in sorted(duplicates.items()))
             raise ValueError(f"C4 violation: variables with multiple producers ({detail})")
 
-        if not self.is_mechanism_acyclic():
-            raise ValueError("C1 violation: mechanism dependency graph is cyclic")
+        # C1 is deliberately NOT enforced here. Acyclicity is a property a *query* needs,
+        # not one the object needs to exist: Lemma 1.1's proof uses it only for the
+        # sub-system it is applied to, so a cycle somewhere else in the graph is
+        # irrelevant to a question that cannot reach it. Enforcing it at construction made
+        # a twenty-thousand-gene network with one feedback loop wholly unavailable --
+        # nothing about any part of it could be asked -- and most regulatory networks have
+        # a loop. `identify` checks the closure of the query instead, and refuses there.
 
     def get_mechanism(self, name: str) -> Mechanism:
         try:
@@ -268,6 +273,76 @@ class MechanismGraph:
                     other for other in consumers.get(variable, ()) if other != name
                 )
         return edges
+
+    def mechanism_components(self) -> tuple[tuple[str, ...], ...]:
+        """The strongly connected components of the mechanism dependency graph.
+
+        Sorted, with each component's members sorted, so the answer is stable between runs
+        -- a cost or a refusal that varied with dict ordering could not be checked against
+        anything. Components are returned for acyclic graphs too, as singletons.
+
+        Tarjan's algorithm, iterative rather than recursive: a chain of twenty thousand
+        mechanisms is an ordinary size for this library and would overflow the interpreter
+        stack.
+        """
+        edges = self.mechanism_dependencies()
+        index: dict[str, int] = {}
+        low: dict[str, int] = {}
+        on_stack: set[str] = set()
+        stack: list[str] = []
+        components: list[tuple[str, ...]] = []
+        counter = 0
+
+        for root in sorted(edges):
+            if root in index:
+                continue
+            work: list[tuple[str, list[str]]] = [(root, sorted(edges[root]))]
+            index[root] = low[root] = counter
+            counter += 1
+            stack.append(root)
+            on_stack.add(root)
+            while work:
+                node, pending = work[-1]
+                if pending:
+                    child = pending.pop()
+                    if child not in index:
+                        index[child] = low[child] = counter
+                        counter += 1
+                        stack.append(child)
+                        on_stack.add(child)
+                        work.append((child, sorted(edges[child])))
+                    elif child in on_stack:
+                        low[node] = min(low[node], index[child])
+                    continue
+                work.pop()
+                if work:
+                    parent = work[-1][0]
+                    low[parent] = min(low[parent], low[node])
+                if low[node] == index[node]:
+                    component: list[str] = []
+                    while True:
+                        member = stack.pop()
+                        on_stack.discard(member)
+                        component.append(member)
+                        if member == node:
+                            break
+                    components.append(tuple(sorted(component)))
+        return tuple(sorted(components))
+
+    @property
+    def cyclic_mechanisms(self) -> frozenset[str]:
+        """Mechanisms that lie on a cycle.
+
+        Exactly the members of a strongly connected component with more than one member.
+        A component of size one is never cyclic here: a self-edge would need a mechanism's
+        output to be one of its own inputs, which C3 already forbids.
+        """
+        return frozenset(
+            name
+            for component in self.mechanism_components()
+            if len(component) > 1
+            for name in component
+        )
 
     def is_mechanism_acyclic(self) -> bool:
         edges = self.mechanism_dependencies()

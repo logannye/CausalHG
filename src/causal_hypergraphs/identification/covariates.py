@@ -153,6 +153,16 @@ def check_covariates(
 
     target = query.target
     graph.get_mechanism(target)
+    if not graph.is_mechanism_acyclic():
+        raise ValueError(
+            "Covariate admissibility rests on d*-separation, whose soundness proof "
+            "(THEOREM_T1.md Lemma 2.1) requires C1. On a cyclic mechanism graph -- here "
+            f"{sorted(graph.cyclic_mechanisms)} -- the post-treatment finding would still "
+            "be a structural fact, but the path-opening one would be a warning with no "
+            "criterion behind it. Reporting the first without the second would read as "
+            "'no path-opening risk found', which is not what the graph says."
+        )
+
     if target in graph.variable_set:
         # The mechanism and a variable would be one node in the bipartite blowup, which
         # makes the separation queries below ill-posed. Raising beats degrading quietly:

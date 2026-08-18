@@ -84,6 +84,41 @@ The estimand is an AST, not a string. It renders to text and LaTeX, exposes its
 scope and the primitive kernels it references, and has a canonical key for
 comparison.
 
+### Feedback loops
+
+Most regulatory networks have one, and C1 used to reject the whole graph at construction —
+a fifty-link chain with one completely disjoint two-cycle elsewhere could not be built, so
+nothing about any part of it could be asked.
+
+Lemma 1.1's proof needs acyclicity of the sub-system it is applied to, not of the ambient
+graph. An ancestrally-closed set of variables is self-contained and its noises are
+independent by C2, so its marginal factorizes on its own. The question is therefore whether
+the *query's closure* is acyclic:
+
+```python
+graph.cyclic_mechanisms          # frozenset({'m1', 'm2'})
+graph.mechanism_components()     # (('m1', 'm2'), ('far',))
+
+identify(graph, DeleteMechanism("far", outcomes={"R"}))   # Identified — the loop is elsewhere
+identify(graph, DeleteMechanism("m1", outcomes={"Y"}))    # Unknown — the loop is in the way
+```
+
+Both halves are measured. With a two-cycle downstream the estimand still matches the true
+post-deletion law; with the cycle inside the closure the same machinery is **68% wrong**,
+because for a mechanism on a cycle the observational conditional is not its structural
+kernel — its inputs and outputs are mutually determined.
+
+An answer on a cyclic graph declares what it rests on. `C1` is replaced by `C1 (local)`,
+and `Solvability` is added: under C1 the law is defined by sampling in topological order,
+which is total, and without C1 there is no such procedure — the law is the pushforward of
+the noise through the solution of `V = F(V, U)`, which may have none or many. The compiler
+never sees `F`, so it records that rather than checking it, exactly as it does for C2.
+
+Three things refuse rather than answer on a cyclic graph: `d_separated` and
+`check_covariates`, because `THEOREM_T1.md`'s soundness proof rests on C1 (its Lemma 2.1
+ends "C1 forbids cycles in `G_E`"), and `latent_project_to_variable_admg`, because a Pearl
+ADMG is acyclic by definition.
+
 ### Three outcomes, and the difference between them is the point
 
 `Identified` carries a formula. `Unknown` says this compiler cannot do it and what would
@@ -398,7 +433,9 @@ theorem, its assumptions, and its derivation attached.
 
 ## What is implemented
 
-- Typed mechanism graph with C1/C3/C4 validation at construction.
+- Typed mechanism graph with C3/C4 validation at construction. **C1 is a per-query
+  condition, not a construction-time veto**: a cyclic graph is a legitimate object, and the
+  compiler refuses only queries whose own ancestral closure reaches a cycle.
 - `delete` and `replace` queries; `T2`/`T3` (full observation), `T4`/`T4.1` (latent
   mechanisms), `T6` (hidden variables, observed target boundary).
 - Kernel-form identifiers where available; quotient plus an explicit positivity
@@ -455,6 +492,17 @@ theorem, its assumptions, and its derivation attached.
 - Complete Pearl-ID beyond the currently implemented backend cases.
 - Markov-kernel mechanisms; richer role typing (substrate / enzyme / product);
   mechanism-correlated noise.
+- Identification *inside* a cycle. Not a gap in the implementation: on the two-cycle the
+  models sharing an observational law form a curve along which the post-deletion variance
+  is unbounded and the covariance takes both signs, so there is nothing in `P(V)` to
+  identify the answer with. σ-separation and the simple-SCM machinery (Forré & Mooij;
+  Bongers et al.) would be the route to the cases that *are* identifiable.
+- A cycle strictly *upstream* of the intervention. The deletion severs it, so the query
+  looks answerable, and it would be a valuable case — feedback upstream of a knockdown is
+  the normal situation in biology. It is refused because the ancestral reduction computes
+  its closure on the observational graph and would keep the cyclic factors, whose product
+  does not integrate away (`Σ P(x|y)P(y|x)` runs over `[1, 2]`). Taking it needs the
+  reduction rebuilt on the post-*intervention* law.
 - Queries wider than their treewidth. Elimination moved the frontier a long way — a
   111-variable ancestry costs a 64-entry table — but around seven hops into a sparse GRN
   the branches' ancestries overlap, the induced width passes 20, and the query is
@@ -466,12 +514,10 @@ theorem, its assumptions, and its derivation attached.
   becomes the bottleneck before the elimination does.
 - Continuous *conditioning* variables. Outcomes may be continuous via `E[Y | do]`;
   anything conditioned on must still be binned by the caller, deliberately.
-- Cyclic mechanism graphs. C1 rejects feedback at construction, which rules out most
-  regulatory networks.
 
 ## Status and known gaps
 
-The suite is `274 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+The suite is `295 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
 
 Correctness is established by a randomized differential harness (`tests/conformance/`)
 rather than by comparing rendered strings. It generates models satisfying C1–C4 with
