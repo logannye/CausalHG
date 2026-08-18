@@ -91,6 +91,8 @@ def sweep() -> dict[str, int]:
                     continue
                 assert isinstance(result, Identified), f"seed {seed}: unexpected {result!r}"
                 tally["identified"] += 1
+                branch = f"theorem:{result.theorem}"
+                tally[branch] = tally.get(branch, 0) + 1
 
                 discrete = _discrete_model(model, spec.name, with_replacement=with_replacement)
                 truth = model.marginalize_to_observed(full_truth)
@@ -151,3 +153,69 @@ def test_the_sweep_exercises_non_factorizing_deletion_policies(sweep) -> None:
     product form can express, so they make the joint type load-bearing here.
     """
     assert sweep["non_factorizing_deletions"] >= 50, sweep
+
+
+# --- branch coverage --------------------------------------------------------------
+
+
+def _labels_the_compiler_can_return() -> set[str]:
+    """Every theorem label `_theorem` can return, read off its source rather than listed.
+
+    A hand-written population is the standard way a coverage gate goes quietly wrong: the
+    predicate is right and the population is short by exactly the branch nobody exercised.
+    Parsing the returns means a new branch joins the population the moment it exists, so
+    this gate cannot be satisfied by forgetting to update it.
+    """
+    import ast
+    import inspect
+
+    from causal_hypergraphs.identification import api
+
+    tree = ast.parse(inspect.cleandoc(inspect.getsource(api._theorem)))
+    return {
+        node.value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Return)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    }
+
+
+def test_every_theorem_branch_the_compiler_can_return_is_exercised(sweep) -> None:
+    """A branch the sweep never enters is a branch the sweep does not test.
+
+    The sweep verified hundreds of estimands without anyone knowing which of the compiler's
+    five branches produced them, so a branch could stop firing -- or start firing wrongly
+    for a whole class of models -- while every count stayed green. This is the same gate
+    `test_every_line_of_the_recursion_is_exercised` puts on the Shpitser recursion.
+    """
+    population = _labels_the_compiler_can_return()
+    # If the scan broke, the population would be empty and the subtraction below would
+    # pass vacuously. A gate a wrong computation passes is not a gate.
+    assert len(population) >= 5, population
+    assert "T4.1" in population, population
+
+    fired = {key.removeprefix("theorem:") for key in sweep if key.startswith("theorem:")}
+
+    unfired = population - fired
+    assert not unfired, (
+        f"{sorted(unfired)} are branches `_theorem` can return that {MODEL_COUNT} generated "
+        f"models never reached, so nothing in this sweep tests them. Fired: "
+        f"{ {label: sweep[f'theorem:{label}'] for label in sorted(fired)} }"
+    )
+
+
+def test_no_theorem_branch_is_reached_by_a_negligible_number_of_models(sweep) -> None:
+    """Firing once is coverage in name only.
+
+    A branch entered by a single model out of the sweep is one fixture wearing a sweep's
+    clothes: it cannot distinguish a bug that affects a class of graphs from one that
+    affects that graph. This keeps the branch mix honest rather than merely non-zero.
+    """
+    counts = {
+        key.removeprefix("theorem:"): value
+        for key, value in sweep.items()
+        if key.startswith("theorem:")
+    }
+    thin = {label: n for label, n in counts.items() if n < 10}
+    assert not thin, f"branches reached by fewer than 10 queries: {thin} (all: {counts})"
