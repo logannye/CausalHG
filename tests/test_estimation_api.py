@@ -36,6 +36,7 @@ from causal_hypergraphs.estimation import (
     UnsupportedEstimand,
     estimate,
 )
+from causal_hypergraphs.examples import frontdoor_hidden_boundary_graph
 from tests.conformance.generation import generate_model
 
 BINARY = (0, 1)
@@ -395,3 +396,30 @@ def test_the_summary_leads_with_what_the_data_cannot_check() -> None:
     assert "Downstream positivity" in checked, summary
     # The unverifiable block comes first: it is the caveat, not the footnote.
     assert summary.index("Not checked") < summary.index("Checked against the data")
+
+
+def test_a_t7_estimate_leads_with_the_model_conditions_like_every_other_branch() -> None:
+    """T7 is the only answer assembled from a Pearl sub-result, and it dropped C1/C2/C4.
+
+    Every boundary-violating *refusal* recorded them; the single branch that returns a
+    formula did not. So the one T7 result a caller could turn into a number was the one
+    whose summary omitted the model conditions entirely -- exactly inverting the ordering
+    this report exists to enforce. The generated-model sweeps cannot reach here: they emit
+    C1-C4 graphs with observed boundaries, so no amount of sweeping enters the T7 path.
+    """
+    graph = frontdoor_hidden_boundary_graph()
+    result = identify(graph, DeleteMechanism("m_x", outcomes={"Y"}), allow_t7=True)
+    assert isinstance(result, Identified), result
+
+    rows = [
+        {"X": x, "Y": y, "Z": z}
+        for x, y, z in itertools.product(BINARY, BINARY, BINARY)
+        for _ in range(10 + 3 * x + 2 * y + z)
+    ]
+    est = estimate(
+        result, Dataset.from_records(rows), fallbacks={"m_x": {(0,): 0.5, (1,): 0.5}}
+    )
+
+    not_checked, _, _ = est.summary().partition("Checked against the data")
+    assert "C2" in not_checked, est.summary()
+    assert "independent exogenous noise" in not_checked.lower(), est.summary()
