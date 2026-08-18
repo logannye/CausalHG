@@ -39,9 +39,11 @@ The v1 compiler relies on four structural assumptions:
 - **C3:** mechanisms use input/output role typing.
 - **C4:** each variable has at most one producing mechanism.
 
-Graph construction validates C1, C3, and C4 directly. C2 is recorded as an
-assumption certificate because it is semantic rather than checkable from
-incidence alone.
+Graph construction validates C3 and C4 directly. C1 is **not** validated at
+construction: a cyclic mechanism graph is a legitimate object, and acyclicity is
+required only of the sub-system a given query reaches, so it is checked per query
+against that query's own closure. C2 is recorded as an assumption certificate
+because it is semantic rather than checkable from incidence alone.
 
 ## Queries
 

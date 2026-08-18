@@ -1,5 +1,6 @@
 import itertools
 import random
+from pathlib import Path
 
 from causal_hypergraphs import (
     Dataset,
@@ -205,9 +206,24 @@ def test_readme_empty_stratum_block_reports_the_counts_it_prints() -> None:
     )
     summary = est.summary()
 
-    assert "Downstream positivity: FAIL" in summary
-    assert "16 of 64 point(s) undefined across 1 empty stratum/strata" in summary
-    assert "! P(F | C,E) undefined at C=1, E=1 (16 point(s) unreachable)" in summary
+    # Compared as a CONTIGUOUS BLOCK, not by three substring probes. The README shows a
+    # region of output, so the claim is about the region: three `in summary` assertions
+    # stayed green while `Policy support` was inserted between the second line and the
+    # third, and the README quietly under-reported what the tool prints. A gate a wrong
+    # document passes is the shape this file exists to prevent.
+    block = "Checked against the data:" + summary.split("Checked against the data:")[1]
+    assert [line.strip() for line in block.strip().splitlines()] == [
+        "Checked against the data:",
+        "Downstream positivity: FAIL",
+        "16 of 64 point(s) undefined across 1 empty stratum/strata",
+        "Policy support: PASS",
+        "P0_m1 rests on 1500 effective row(s) of 3000 (2x the reported count)",
+        "! P(F | C,E) undefined at C=1, E=1 (16 point(s) unreachable)",
+    ]
+    # ...and the README must show exactly that block.
+    readme = Path("README.md").read_text()
+    for line in block.strip().splitlines():
+        assert line.strip() in readme, line.strip()
     # Absent, never nan: the affected points are not in `values` at all.
     assert (0, 1, 1, 0, 1, 1) not in est.values
 

@@ -2,7 +2,8 @@
 
 A perturbation screen is expensive and its analysis is cheap, so the analysis is where the
 mistakes go unnoticed. This demo points the compiler at a real published screen -- Norman
-et al. 2019, 65,359 K562 cells, 106 single-gene arms -- and asks, for a grid of
+et al. 2019, 65,359 K562 cells, 105 single-gene arms plus a non-targeting control --
+and asks, for a grid of
 mechanism-level causal questions, which ones these data can answer.
 
 Most of them cannot be answered, and *each refusal is checked against evidence assembled
@@ -86,12 +87,25 @@ def load_cells() -> list[dict[str, Any]]:
         ]
 
 
+RESOURCES: dict[str, dict[str, set[str]]] = {}
+"""target -> source -> the constituent resources asserting that edge."""
+
+
+def _base(tag: str) -> str:
+    for suffix in ("_CollecTRI2", "_CollecTRI", "_DoRothEA"):
+        if tag.endswith(suffix):
+            return tag[: -len(suffix)]
+    return tag
+
+
 def load_edges() -> dict[str, set[str]]:
     path = HERE / "data" / "collectri_edges.tsv"
     incoming: dict[str, set[str]] = defaultdict(set)
     with open(path, newline="") as handle:
         for row in csv.DictReader(handle, delimiter="\t"):
             incoming[row["target"]].add(row["source"])
+            tags = {_base(t) for t in row["resources"].split(";") if t}
+            RESOURCES.setdefault(row["target"], {})[row["source"]] = tags
     return incoming
 
 
@@ -181,6 +195,30 @@ def conditional_factors(expression) -> int:
 # -- the five verdicts ---------------------------------------------------------------
 
 
+def cycle_survival(incoming: dict[str, set[str]]) -> str:
+    """Do the pathway's cycles survive restriction to one curated resource at a time?
+
+    Measured at PATHWAY scope, which is the scope the claim is about. Quoting the
+    strongly-connected component of the whole ~64k-edge network would be a statement about
+    a different object -- it is larger, and it is not what these twenty genes do.
+    """
+    counts = {}
+    for label, resource in (("TRRUST", "TRRUST"), ("DoRothEA-A", "DoRothEA-A")):
+        restricted = {
+            target: {source for source, tags in sources.items() if resource in tags}
+            for target, sources in RESOURCES.items()
+        }
+        graph = curated_graph({k: v for k, v in restricted.items() if v})
+        counts[label] = len(graph.cyclic_mechanisms)
+    full = len(curated_graph(incoming).cyclic_mechanisms)
+    return (
+        f"Feedback here is real biology, not an artefact of aggregating databases: of the "
+        f"{full} genes on a cycle under the full network, {counts['TRRUST']} are still on one "
+        f"under TRRUST alone and {counts['DoRothEA-A']} under DoRothEA-A alone -- two "
+        f"independently curated resources."
+    )
+
+
 def verdict_cycles(incoming: dict[str, set[str]]) -> None:
     rule("VERDICT 1 -- the network as curated is cyclic, so most queries have no answer")
     graph = curated_graph(incoming)
@@ -201,6 +239,7 @@ def verdict_cycles(incoming: dict[str, set[str]]) -> None:
     total = sum(tally.values())
     print(f"\n  {len(graph.cyclic_mechanisms)} of {len(PATHWAY)} mechanisms lie on a cycle: "
           f"{', '.join(sorted(graph.cyclic_mechanisms)[:6])} ...")
+    survival = cycle_survival(incoming)
     print(f"\n  verbatim refusal:\n    {reason}")
     record(
         "cycles",
@@ -209,8 +248,7 @@ def verdict_cycles(incoming: dict[str, set[str]]) -> None:
         f"of which {nontrivial} are non-trivial",
         "The refusal names the mechanisms whose kernels the query needs. For a mechanism on "
         "a cycle the observational conditional is not its structural kernel: its inputs and "
-        "outputs are mutually determined. Feedback here is real biology, not a curation "
-        "artefact -- these cycles survive restriction to TRRUST alone and to DoRothEA-A alone.",
+        "outputs are mutually determined. " + survival,
     )
 
 

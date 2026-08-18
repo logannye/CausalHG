@@ -82,6 +82,33 @@ def test_unrolling_in_time_is_what_restores_the_answers(report: dict) -> None:
     assert all(row["identified"] == 100 for row in report["unrolled"])
 
 
+def test_the_cycle_finding_is_recomputed_per_resource_not_quoted(report: dict) -> None:
+    """The claim is about THESE twenty genes, so it must be measured on them.
+
+    An earlier draft quoted the strongly connected component of the whole ~64k-edge
+    network (253 nodes under TRRUST, ~103 under DoRothEA-A) as evidence that the pathway's
+    cycles survive independent curation. Those are true numbers about a different object:
+    at pathway scope the count falls 12 -> 6 -> 4. The demo now computes the pathway
+    figures, and they are pinned here because the demo prints them as EVIDENCE.
+    """
+    (cycles,) = [e for e in report["verdicts"] if e["name"] == "cycles"]
+    assert "of the 12 genes on a cycle under the full network" in cycles["evidence"]
+    assert "6 are still on one under TRRUST alone" in cycles["evidence"]
+    assert "4 under DoRothEA-A alone" in cycles["evidence"]
+
+
+def test_the_two_disclosures_are_pinned_not_just_the_refusals(report: dict) -> None:
+    """Verdicts 3 and 5 return NUMBERS, so their figures are the ones most worth pinning.
+
+    Verdict 2 is pinned too: `check_covariates` was reworked in the same cycle, and a
+    rework that flipped GATA1 to refused would otherwise leave this suite green.
+    """
+    by_name = {e["name"]: e for e in report["verdicts"]}
+    assert "19 of 11,183 cells" in by_name["dead_readout"]["verdict"]
+    assert "CELL_CYCLE, TOTAL_UMI are post-treatment" in by_name["post_treatment"]["verdict"]
+    assert "3 of 3 point(s) undefined" in by_name["degenerate_binning"]["verdict"]
+
+
 def test_the_policy_certificate_fires_on_the_real_arm(report: dict) -> None:
     """The guard that did not exist until this data was run through the library."""
     policy = report["policy"]

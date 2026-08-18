@@ -54,7 +54,20 @@ something else in its place. Two operations are supported:
 pip install -e ".[dev]"
 ```
 
-Requires Python 3.11+. The only runtime dependency is NumPy.
+Requires Python 3.11+. **The library itself has no runtime dependencies** — `src/` imports
+nothing but the standard library. NumPy is a development dependency, needed only by the
+`minimal_model/` reference implementation and parts of the test suite.
+
+To see the library used on real published data before reading any further:
+
+```bash
+python3 demo/preflight.py     # ~2s, no install, no third-party packages
+```
+
+It runs a grid of mechanism-level causal questions against Norman et al. 2019 (65,359 K562
+cells) and reports which the data can answer — three refusals and two disclosures, each
+printed beside evidence assembled independently of the compiler. See
+[`demo/README.md`](demo/README.md).
 
 ## Quickstart
 
@@ -314,10 +327,18 @@ need. The outcome appears in exactly one chain-rule factor, so it can be folded 
 conditional mean and never enumerated:
 
 ```python
+graph = MechanismGraph(
+    variables={"genotype", "stim", "TF", "target"},
+    mechanisms={
+        "reg": {"inputs": ("genotype", "stim"), "outputs": ("TF",)},
+        "m_target": {"inputs": ("TF",), "outputs": ("target",)},
+    },
+)
+
 q = identify_expectation(graph, DeleteMechanism("reg"), "target")
 str(q.expression)
-# 'sum_{TF,genotype,stim} E[target | TF] * P(genotype) * P(stim) * P0_reg(TF)'
-q.expression.footprint()      # {'TF', 'genotype', 'stim'} -- 'target' is absent
+# 'sum_{TF} E[target | TF] * P0_reg(TF)'
+q.expression.footprint()      # frozenset({'TF'}) -- 'target' is absent
 
 data = Dataset.from_records(rows, unit="donor", measures=("target",))
 estimate(q, data, fallbacks={"reg": knockdown}, bootstrap=300)
@@ -438,12 +459,31 @@ rather than present as `nan`:
 Checked against the data:
   Downstream positivity: FAIL
   16 of 64 point(s) undefined across 1 empty stratum/strata
+  Policy support: PASS
+  P0_m1 rests on 1500 effective row(s) of 3000 (2x the reported count)
   ! P(F | C,E) undefined at C=1, E=1 (16 point(s) unreachable)
 ```
 
 Even when every certificate holds, `support.min_stratum_count` reports the sparsest data
 cell the estimand actually read — a quotient can be perfectly well defined and still rest
 on six rows.
+
+**The row count in the header is not the row count behind the answer.** A deletion
+estimand is `sum_t (downstream)(t) * P0(t)`, so the policy's weights decide which rows carry
+the answer: lean on a level the data barely populates and the estimate rests on those rows
+while the header still reports the whole table. `Policy support` reports the
+inverse-variance count `effective_n = 1 / sum_t (w_t**2 / n_t)` and, beside it, how many
+times the header overstates it. Both are printed whatever `estimate(..., policy_floor=30)`
+is set to, so the disclosure never depends on the threshold — a policy can clear any floor
+and still be standing on a ninetieth of the table. It is deliberately *not* a positivity
+certificate: positivity asks whether a conditioning cell is empty, this asks whether a
+non-empty cell is being leaned on, and `estimated.policy` carries it separately from
+`estimated.support` for that reason.
+
+This one exists because of a real failure. Run against a CRISPRa arm that drives its target
+24.8x past anything the control cells show, the compiler returned a number that landed on
+top of the control law, reported against 11,183 rows, with every existing certificate
+reading `PASS`. See [`demo/`](demo/README.md).
 
 **The unit of independence is declared, not assumed.** `unit=` names what is
 exchangeable, and the bootstrap resamples those, not rows. It matters: on data with 20
@@ -492,8 +532,10 @@ returning an unsound estimand.
 | **C3** | Mechanisms have input/output role typing. |
 | **C4** | Each variable has at most one producing mechanism. |
 
-C1, C3 and C4 are checked when the graph is constructed. C2 is semantic rather than
-structural, so it is recorded as an assumption certificate on every result.
+C3 and C4 are checked when the graph is constructed. **C1 is not** — since a cyclic graph
+is a legitimate object, acyclicity is checked per query, against the query's own closure
+(see [Feedback loops](#feedback-loops)). C2 is semantic rather than structural, so it is
+recorded as an assumption certificate on every result.
 
 ## How this relates to Pearl
 
@@ -587,11 +629,10 @@ theorem, its assumptions, and its derivation attached.
   identify the answer with. σ-separation and the simple-SCM machinery (Forré & Mooij;
   Bongers et al.) would be the route to the cases that *are* identifiable.
 - A cycle strictly *upstream* of the intervention. The deletion severs it, so the query
-  looks answerable, and it would be a valuable case — feedback upstream of a knockdown is
-  the normal situation in biology. It is refused because the ancestral reduction computes
-  its closure on the observational graph and would keep the cyclic factors, whose product
-  does not integrate away (`Σ P(x|y)P(y|x)` runs over `[1, 2]`). Taking it needs the
-  reduction rebuilt on the post-*intervention* law.
+  is now **answered**, not refused: the ancestral closure is computed on the
+  post-*intervention* graph, and a deletion severs its own target's inputs, so the loop is
+  no longer upstream of anything the query needs. What is still refused is a cycle whose
+  *kernels the answer needs* — see [Feedback loops](#feedback-loops).
 - Queries wider than their treewidth. Elimination moved the frontier a long way — a
   106-variable ancestry costs a 64-entry table — but around seven hops into a sparse GRN
   the branches' ancestries overlap, the induced width passes 20, and the query is
@@ -606,7 +647,7 @@ theorem, its assumptions, and its derivation attached.
 
 ## Status and known gaps
 
-The suite is `317 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+The suite is `350 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
 
 Correctness is established by a randomized differential harness (`tests/conformance/`)
 rather than by comparing rendered strings. It generates models satisfying C1–C4 with
@@ -669,6 +710,7 @@ refuses, it does not err.**
 | `THEOREM_T2_T3.md` | Mechanism chain rule; deletion and replacement identifiers. |
 | `THEOREM_T4_T5.md` | Latent mechanisms; districts; reduction of variable interventions. |
 | `THEOREM_H1_PLUS.md` | Hidden variables (`T6`), the `T7` track, the hyper-hedge conjecture. |
+| `demo/README.md` | The pre-flight report: the library run against a real Perturb-seq screen. |
 
 ## Development
 
@@ -689,9 +731,11 @@ src/causal_hypergraphs/
   semantics/        finite-discrete evaluation: enumeration and variable elimination
   estimation/       datasets, factored empirical model, estimation, certificate discharge
 
+demo/               pre-flight report on a real Perturb-seq screen, with vendored data
 minimal_model/      NumPy reference implementation
 tests/              compiler, semantics, and separation tests
 tests/conformance/  model generator and exact-ground-truth checkers
+tests/idcorpus/     literature ID cases the generator cannot reach
 ```
 
 ## License

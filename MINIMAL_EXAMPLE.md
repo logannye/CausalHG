@@ -228,10 +228,12 @@ Under T1 (target theorem), Pearl d-separation on $B(\mathcal{M})$ governs hyperg
 Every numerical claim in this document is reproduced by `minimal_model/`:
 
 - `examples.reaction_network()` builds the SCM of §2.
-- `test_example.py::test_observational` checks $\mathrm{Corr}(C, D) = 1$ on samples.
-- `test_example.py::test_intervention_1` verifies $\mathrm{do}(A = 4)$.
-- `test_example.py::test_intervention_2` verifies $\mathrm{do}(\neg m_1) \Rightarrow C = D = 0$.
-- `test_example.py::test_intervention_3` verifies $\mathrm{do}(m_1 \to m_1')$ preserves $C = D$.
-- `test_example.py::test_counterfactual` reproduces the §5 hand calculation to 6 decimal places.
+- `test_example.py::test_observational_correlation_one` checks $\mathrm{Corr}(C, D) = 1$ on samples.
+- `test_example.py::test_intervention_1_variable` verifies $\mathrm{do}(A = 4)$.
+- `test_example.py::test_intervention_2_mechanism_deletion` verifies $\mathrm{do}(\neg m_1) \Rightarrow C = D = 0$.
+- `test_example.py::test_intervention_3_mechanism_replacement` verifies $\mathrm{do}(m_1 \to m_1')$ preserves $C = D$.
+- `test_example.py::test_counterfactual_variable_intervention` reproduces the §5 hand calculation to 6 decimal places.
 - `test_example.py::test_counterfactual_mechanism_deletion` reproduces §6.
-- `test_example.py::test_irreducibility_witness` exhibits the $\mathrm{Corr}(C, D) = 1$ vs. Pearl-decomposed comparison.
+- The $\mathrm{Corr}(C, D) = 1$ versus Pearl-decomposed comparison — the irreducibility
+  witness — is carried by `test_example.py::test_observational_correlation_one`, whose
+  docstring names it; there is no separate test for it.
