@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -140,6 +141,63 @@ class ADMG:
             districts.append(tuple(sorted(component)))
         return tuple(districts)
 
+    def m_separated(self, source: str, target: str, given: Iterable[str]) -> bool:
+        """Is `source` m-separated from `target` by `given`?
+
+        m-separation is d-separation for ADMGs. It is decided here by the standard route:
+        expand each bidirected edge into an explicit latent common parent, which is what a
+        bidirected edge abbreviates, then apply the ancestral-moral-graph criterion to the
+        resulting DAG (Lauritzen et al. 1990). Two nodes are separated when every path
+        between them is blocked, which after moralization is ordinary graph connectivity
+        with the conditioning set removed.
+        """
+        conditioning = set(_ordered(given))
+        latents = {
+            f"__u{index}": edge for index, edge in enumerate(self.bidirected_edges)
+        }
+        parents: dict[str, set[str]] = {node: set() for node in self.nodes}
+        parents.update({name: set() for name in latents})
+        for origin, destination in self.directed_edges:
+            parents[destination].add(origin)
+        for name, (left, right) in latents.items():
+            parents[left].add(name)
+            parents[right].add(name)
+
+        # Ancestral subgraph over the query, then moralize it.
+        wanted = {source, target} | conditioning
+        ancestors: set[str] = set()
+        stack = list(wanted)
+        while stack:
+            node = stack.pop()
+            if node in ancestors:
+                continue
+            ancestors.add(node)
+            stack.extend(parents[node])
+
+        adjacency: dict[str, set[str]] = {node: set() for node in ancestors}
+        for node in ancestors:
+            kin = sorted(parents[node] & ancestors)
+            for parent in kin:
+                adjacency[node].add(parent)
+                adjacency[parent].add(node)
+            for first, second in itertools.combinations(kin, 2):
+                adjacency[first].add(second)
+                adjacency[second].add(first)
+
+        blocked = conditioning
+        seen = {source}
+        stack = [source]
+        while stack:
+            node = stack.pop()
+            if node == target:
+                return False
+            for neighbour in adjacency.get(node, ()):
+                if neighbour in blocked or neighbour in seen:
+                    continue
+                seen.add(neighbour)
+                stack.append(neighbour)
+        return target not in seen
+
     def has_bidirected_path(self, source: str, target: str) -> bool:
         if source == target:
             return True
@@ -207,63 +265,49 @@ class PearlIDBackend:
         if outcomes & interventions:
             raise ValueError("Outcomes and interventions must be disjoint.")
 
-        if not interventions:
-            expression = SumOut(graph.node_set - outcomes, Probability(graph.nodes))
-            return Identified(
-                expression=expression,
-                theorem="Pearl-ID observational marginal",
+        from .shpitser import Hedge, identify_admg_effect
+
+        outcome_names = tuple(sorted(outcomes))
+        intervention_names = tuple(sorted(interventions))
+        answer = identify_admg_effect(graph, outcome_names, intervention_names)
+
+        if isinstance(answer, Hedge):
+            return Unidentified(
+                reason=(
+                    f"P({','.join(outcome_names)} | do({','.join(intervention_names)})) is "
+                    "not identifiable in this ADMG: the recursion reaches a hedge."
+                ),
+                witness=answer,
                 assumptions=PEARL_ASSUMPTIONS,
                 derivation=(
-                    ProofStep("No intervention", "Marginalize the observational joint."),
+                    ProofStep("Shpitser-Pearl ID", "Ran the seven-line recursion."),
+                    ProofStep("Hedge", str(answer)),
                 ),
             )
 
-        if not graph.bidirected_edges:
-            expression = self._markovian_truncated_factorization(graph, outcomes, interventions)
-            return Identified(
-                expression=expression,
-                theorem="Pearl-ID Markovian truncated factorization",
-                assumptions=PEARL_ASSUMPTIONS,
-                derivation=(
-                    ProofStep("No hidden confounding", "ADMG has no bidirected edges."),
-                    ProofStep("Truncate factors", "Remove factors for intervened variables."),
-                ),
-            )
-
-        frontdoor = self._frontdoor_expression(graph, outcomes, interventions)
-        if frontdoor is not None:
-            (intervened,) = sorted(interventions)
-            return Identified(
-                aliases={f"{intervened}_prime": intervened},
-                expression=frontdoor,
-                theorem="Pearl-ID front-door",
-                assumptions=PEARL_ASSUMPTIONS
-                + (
-                    Assumption(
-                        "Front-door",
-                        "A single observed mediator satisfies the canonical front-door pattern.",
-                    ),
-                ),
-                derivation=(
-                    ProofStep("Find mediator", "Detected X -> Z -> Y with X <-> Y."),
-                    ProofStep("Compile front-door", "Apply the standard front-door estimand."),
-                ),
-            )
-
-        districts = graph.districts()
-        return Unidentified(
-            reason="Pearl ID backend does not identify this effect in its current support set.",
-            witness=PearlHedgeWitness(
-                districts=districts,
-                explanation=(
-                    "The backend found bidirected structure outside its supported "
-                    "Markovian/front-door cases."
-                ),
-            ),
+        expression, aliases = answer
+        return Identified(
+            expression=expression,
+            theorem="Pearl-ID (Shpitser-Pearl)",
             assumptions=PEARL_ASSUMPTIONS,
+            aliases=aliases,
             derivation=(
-                ProofStep("District check", f"Bidirected districts: {districts}."),
-                ProofStep("Refuse", "No supported Pearl-ID rule matched."),
+                ProofStep(
+                    "Shpitser-Pearl ID",
+                    "Sound and complete for P(y | do(x)) in a semi-Markovian model; a "
+                    "formula returned here is correct, and a failure exhibits a hedge.",
+                ),
+            )
+            + (
+                (
+                    ProofStep(
+                        "Copied variables",
+                        f"{sorted(aliases)} are fresh names for {sorted(set(aliases.values()))}, "
+                        "introduced so an inner sum does not capture a value bound outside it.",
+                    ),
+                )
+                if aliases
+                else ()
             ),
         )
 

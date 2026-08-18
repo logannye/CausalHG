@@ -10,7 +10,7 @@ from causal_hypergraphs.expression import (
     ReplacementFactor,
     SumOut,
 )
-from causal_hypergraphs.graph import MechanismGraph
+from causal_hypergraphs.graph import Mechanism, MechanismGraph
 
 from .queries import DeleteMechanism, ReplaceMechanism
 from .results import (
@@ -50,7 +50,7 @@ def identify(
     if isinstance(query, DeleteMechanism):
         return _identify_delete(graph, query, observed_variables, allow_t7=allow_t7)
     if isinstance(query, ReplaceMechanism):
-        return _identify_replace(graph, query, observed_variables)
+        return _identify_replace(graph, query, observed_variables, allow_t7=allow_t7)
     raise TypeError(f"Unsupported query type: {type(query).__name__}")
 
 
@@ -426,6 +426,53 @@ def _surviving_factors(graph: MechanismGraph, exclude: str) -> list[Probability]
     return factors
 
 
+def _replacement_needs_a_joint(
+    query: ReplaceMechanism, target: Mechanism, missing_boundary: tuple[str, ...]
+) -> Unknown:
+    """Why the deletion reduction does not carry over to a replacement.
+
+    `delete(m)` installs an *unconditional* policy, so it factors straight out of the
+    truncated factorization and the answer is a mixture over ordinary Pearl queries:
+
+        P(Y | delete m) = sum_x P0(x) * P(Y | do(out(m) = x))
+
+    A replacement kernel *reads* `in(m)`. The mixture weight then depends on a quantity the
+    intervention itself moves, and the identity becomes
+
+        P(Y | replace m -> m') = sum_{x,z} P_m'(x | z) * P(Y, in(m) = z | do(out(m) = x))
+
+    -- the Pearl query is the *joint* of the outcome with the mechanism's inputs, which is
+    strictly harder than deletion's. Reaching for the deletion identity by symmetry would
+    silently answer a different question, so this refuses and says what would be needed.
+    """
+    return Unknown(
+        reason=(
+            f"replace({query.target} -> {query.replacement}) installs a CONDITIONAL "
+            f"policy: the new kernel reads in({query.target}) = "
+            f"{list(target.inputs)}, so the deletion mixture does not apply. The "
+            "reduction needs P(outcomes, in(m) | do(out(m))), a joint rather than a "
+            "marginal, which this compiler does not build."
+        ),
+        next_algorithm="Conditional-policy reduction (Pearl 2009 sec. 4.2; sigma-calculus).",
+        suggestions=(
+            f"Ask about delete({query.target}) instead, whose policy is unconditional.",
+            f"Measure {list(missing_boundary)} to bring the boundary into view and use T3/T4.1.",
+        ),
+        missing_variables=missing_boundary,
+        assumptions=CORE_ASSUMPTIONS,
+        derivation=(
+            ProofStep(
+                "Boundary check", f"Hidden boundary variables: {list(missing_boundary)}."
+            ),
+            ProofStep(
+                "Policy shape",
+                "Conditional policy: the mixture identity that reduces deletion to Pearl "
+                "ID is unavailable.",
+            ),
+        ),
+    )
+
+
 def _unknown_boundary(graph: MechanismGraph, target: str, missing: tuple[str, ...]) -> Unknown:
     suggestions = tuple(f"Measure boundary variable {variable!r}." for variable in missing)
     return Unknown(
@@ -606,12 +653,15 @@ def _identify_replace(
     graph: MechanismGraph,
     query: ReplaceMechanism,
     observed_variables: object | None,
+    allow_t7: bool = False,
 ) -> IdentificationResult:
     target = graph.get_mechanism(query.target)
     _validate_outcomes(graph, query.outcomes)
     observed = _observed(graph, observed_variables)
     missing_boundary = tuple(sorted(target.boundary - observed))
     if missing_boundary:
+        if allow_t7:
+            return _replacement_needs_a_joint(query, target, missing_boundary)
         return _unknown_boundary(graph, query.target, missing_boundary)
 
     theorem = _theorem(graph, observed, replacement=True)

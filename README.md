@@ -428,20 +428,25 @@ theorem, its assumptions, and its derivation attached.
 - A verdict for every hidden *output* of a deleted mechanism. One that reaches an
   observation is `Unidentified` with a relabelling witness; one that reaches nothing is
   summed out of the declared policy, which identifies it.
-- A deliberately isolated Pearl-ID backend (observational marginals, Markovian
-  truncated factorization, the canonical front-door pattern) and an opt-in `T7`
-  front-door slice via `identify(..., allow_t7=True)`.
+- The **Shpitser-Pearl ID algorithm** over Pearl ADMGs: sound and complete for
+  `P(y | do(x))`, returning a hedge when no formula exists. Its estimands are narrowed by
+  m-separation and folded back into joint district kernels, so what comes out is estimable
+  and not merely correct — a conditional on the whole topological prefix is a stratum no
+  dataset has a row for.
+- An opt-in `T7` reduction via `identify(..., allow_t7=True)`, for a target whose *input*
+  is hidden. Multi-output targets included: `do(out(m))` is one multi-variable Pearl query.
 - `minimal_model/`: a NumPy reference implementation with executable semantics for
   all three do-operators and per-mechanism counterfactual abduction.
 
 ## Not yet supported
 
-- Complete `T7` Pearl-ID reduction, for the case where a *hidden input* leaves the
-  target's boundary unobserved. That is 28 of the 143 hidden-boundary mechanisms across
-  300 generated models; the other 115 are hidden *outputs*, which are now settled without
-  it. The Pearl backend behind it is still the three-case stub (observational marginal,
-  Markovian truncation, canonical front door), so a real Shpitser-Pearl ID is the
-  remaining piece.
+- **Refuting** a mechanism query from a Pearl hedge. When ID fails on the projection the
+  verdict is `Unknown` with the hedge attached, never `Unidentified`. Two gaps sit between
+  them: Shpitser-Pearl completeness refutes identifiability over *all* semi-Markovian
+  models of the ADMG, while this projection's preimage is a strictly smaller class; and the
+  mechanism query is a *mixture* against a supplied policy, so every term failing does not
+  make the mixture fail. Closing that is conjecture H1+, which `THEOREM_H1_PLUS.md` marks
+  open.
 - `replace(m, m')` under a hidden boundary. Deletion installs an unconditional policy, so
   `P(Y | delete m) = Σ P0(x) · P(Y | do(out(m) = x))`. A replacement kernel *reads*
   `in(m)`, so that identity does not apply and the reduction needs the joint
@@ -466,7 +471,7 @@ theorem, its assumptions, and its derivation attached.
 
 ## Status and known gaps
 
-The suite is `215 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+The suite is `274 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
 
 Correctness is established by a randomized differential harness (`tests/conformance/`)
 rather than by comparing rendered strings. It generates models satisfying C1–C4 with
@@ -534,7 +539,7 @@ python -m pyright
 src/causal_hypergraphs/
   graph/            typed incidence and validation
   expression/       probability expression algebra
-  identification/   T2/T3/T4/T6 compilers, latent projection, Pearl-ID backend, T7 track
+  identification/   T2/T3/T4/T6 compilers, latent projection, Shpitser-Pearl ID, T7
   separation/       d*-separation and determination closure
   semantics/        finite-discrete evaluation: enumeration and variable elimination
   estimation/       datasets, factored empirical model, estimation, certificate discharge
