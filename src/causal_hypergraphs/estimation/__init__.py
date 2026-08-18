@@ -6,8 +6,10 @@ distribution rather than of the graph -- checks the certificates the formula car
 against the data actually in hand, naming the strata where they fail.
 """
 from .dataset import Dataset, DatasetError, Point
+from .empirical import EmpiricalModel
 from .estimator import (
     DISCHARGEABLE_CODES,
+    METHODS,
     Estimate,
     EstimationError,
     NotIdentified,
@@ -19,8 +21,10 @@ from .estimator import (
 
 __all__ = [
     "DISCHARGEABLE_CODES",
+    "METHODS",
     "Dataset",
     "DatasetError",
+    "EmpiricalModel",
     "Estimate",
     "EstimationError",
     "NotIdentified",

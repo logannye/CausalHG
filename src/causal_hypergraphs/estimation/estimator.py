@@ -21,26 +21,48 @@ mistaken for a computed zero downstream.
 The interval resamples *units*, not rows, and the estimate reports which. A replicate may
 push a thin stratum to empty; those are counted rather than discarded silently, because a
 high replicate-failure rate is itself the finding.
+
+Nothing exponential in the estimand's footprint is ever built. The estimand is evaluated by
+variable elimination, and the empirical model counts each factor over that factor's own
+variables, so a query whose ancestry has forty variables costs its treewidth rather than
+`2**40`. The estimate reports what it cost, because a number with no cost attached invites
+the next query to be a thousand times worse.
 """
 from __future__ import annotations
 
 import itertools
 import random
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from causal_hypergraphs.expression import Expression
 from causal_hypergraphs.identification import Assumption, IdentificationResult, Identified
 from causal_hypergraphs.semantics import (
+    DEFAULT_MAX_ENTRIES,
     Assignment,
-    DiscreteModel,
+    EliminationPlan,
     MissingKernel,
+    Model,
     SemanticsError,
     UndefinedEstimand,
+    eliminate,
     evaluate,
+    plan_elimination,
 )
 
 from .dataset import Dataset, DatasetError, Point
+from .empirical import EmpiricalModel
+
+Evaluator = Callable[[Expression, Model, Assignment], float]
+
+METHODS = ("eliminate", "enumerate")
+"""How to evaluate the estimand.
+
+`eliminate` is the default and is what makes a wide query affordable. `enumerate` is the
+reference implementation -- slower by an exponential, and kept reachable because agreement
+between the two is what verifies the fast path.
+"""
 
 
 class EstimationError(Exception):
@@ -130,6 +152,14 @@ class Estimate:
     bootstrap: int = 0
     level: float = 0.95
     replicate_failures: int = 0
+    plan: EliminationPlan | None = None
+    """What evaluating this estimand cost, and what enumerating it would have.
+
+    Reported rather than kept internal because the cost is a property of the *query*, not
+    of the machine: it says which questions this graph can answer, and a user who can see
+    that a nearby query jumped from width 2 to width 14 can ask a different one.
+    """
+    method: str = "eliminate"
 
     def summary(self) -> str:
         """A human-readable report that leads with what the data cannot check.
@@ -143,6 +173,8 @@ class Estimate:
             f"Estimate of P({','.join(self.variables)} | intervention) via {self.theorem}",
             f"  {self.n_rows} row(s) in {self.n_units} unit(s); unit = {self.unit}",
         ]
+        if self.plan is not None:
+            lines.append(f"  cost ({self.method}): {self.plan.summary()}")
         if self.bootstrap:
             lines.append(
                 f"  {int(self.level * 100)}% interval from {self.bootstrap} unit-bootstrap "
@@ -184,7 +216,7 @@ class _AuditingModel:
     conditioning stratum.
     """
 
-    def __init__(self, inner: DiscreteModel, expectations: Dataset) -> None:
+    def __init__(self, inner: Model, expectations: Dataset) -> None:
         self._inner = inner
         # Conditional expectations are group means over rows, not functions of the
         # discretized joint, so they are served by the dataset itself. That is what keeps
@@ -246,10 +278,25 @@ def _as_identified(result: IdentificationResult | Identified) -> Identified:
     )
 
 
+def _evaluator(method: str, max_entries: int) -> Evaluator:
+    if method == "eliminate":
+        return lambda expression, model, assignment: eliminate(
+            expression, model, assignment, max_entries=max_entries
+        )
+    if method == "enumerate":
+        return evaluate
+    raise ValueError(
+        f"Unknown evaluation method {method!r}. Expected one of {list(METHODS)}: "
+        "'eliminate' pays the estimand's treewidth, 'enumerate' pays its whole footprint "
+        "and exists as the reference the fast path is checked against."
+    )
+
+
 def _evaluate_over_scope(
     identified: Identified,
     model: _AuditingModel,
     variables: tuple[str, ...],
+    evaluator: Evaluator,
 ) -> tuple[dict[Point, float], dict[tuple[str, Point], SupportFailure]]:
     """Evaluate at every point of the estimand's scope, collecting undefined strata."""
     values: dict[Point, float] = {}
@@ -259,7 +306,7 @@ def _evaluate_over_scope(
     for combination in itertools.product(*domains):
         assignment = dict(zip(variables, combination, strict=True))
         try:
-            values[combination] = evaluate(identified.expression, model, assignment)
+            values[combination] = evaluator(identified.expression, model, assignment)
         except UndefinedEstimand as undefined:
             stratum = undefined.stratum
             key = (
@@ -279,21 +326,22 @@ def _evaluate_over_scope(
 
 
 def _thinnest_stratum(
-    data: Dataset, strata: set[tuple[tuple[str, ...], Point]]
+    model: EmpiricalModel, strata: set[tuple[tuple[str, ...], Point]]
 ) -> tuple[int | None, Mapping[str, Any] | None]:
     """The smallest row count among the conditioning cells the estimand actually used.
 
     An estimand can be perfectly well defined and still be resting on a handful of rows.
     Reporting only pass/fail on positivity would hide that, so the thinnest cell is part
     of the report: it is the number that says how much the quotient can be trusted.
+
+    Reads the counts back off the model rather than re-tallying: these are the very cells
+    the model was asked for, and on a wide query a second pass per conditioning set is the
+    same order of work as the estimate itself.
     """
     smallest: int | None = None
     where: Mapping[str, Any] | None = None
-    cache: dict[tuple[str, ...], dict[Point, int]] = {}
     for names, point in sorted(strata):
-        if names not in cache:
-            cache[names] = data.counts(names)
-        count = cache[names].get(point, 0)
+        count = model.counts(names).get(point, 0)
         if smallest is None or count < smallest:
             smallest = count
             where = dict(zip(names, point, strict=True))
@@ -320,6 +368,8 @@ def estimate(
     bootstrap: int = 0,
     level: float = 0.95,
     seed: int = 0,
+    method: str = "eliminate",
+    max_entries: int = DEFAULT_MAX_ENTRIES,
 ) -> Estimate:
     """Evaluate an identified estimand against `data` and discharge its certificates.
 
@@ -338,6 +388,13 @@ def estimate(
     bootstrap:
         Number of unit-resampled replicates for the interval. Zero (the default) returns
         a point estimate with no interval rather than a fake one.
+    method:
+        `"eliminate"` (default) evaluates by variable elimination and costs the estimand's
+        treewidth; `"enumerate"` walks the whole footprint and is the reference the fast
+        path is verified against. They return the same numbers.
+    max_entries:
+        Largest intermediate table elimination may build. Exceeding it raises
+        `IntractableQuery` naming the variables that met, rather than exhausting memory.
 
     Returns
     -------
@@ -345,6 +402,7 @@ def estimate(
     these data. Points lost to an empty conditioning stratum are absent from `values` and
     described in `support.failures`.
     """
+    evaluator = _evaluator(method, max_entries)
     identified = _as_identified(result)
     # Two different sets, and conflating them is a bug the marginal-query work exposed.
     # `scope` is what the answer is indexed by -- the points that come back in `values`.
@@ -361,13 +419,19 @@ def estimate(
         )
 
     try:
-        inner = data.model(footprint, fallbacks=fallbacks, replacements=replacements)
+        inner = EmpiricalModel(
+            data, footprint, fallbacks=fallbacks, replacements=replacements
+        )
     except (DatasetError, SemanticsError) as error:  # pragma: no cover - defensive
         raise UnsupportedEstimand(str(error)) from error
 
+    # Computed even when enumerating: the plan is what tells a caller that the query they
+    # just paid an exponential for had a width of two.
+    plan = plan_elimination(identified.expression, inner.domains, bound=variables)
+
     model = _AuditingModel(inner, data)
-    values, failures = _evaluate_over_scope(identified, model, variables)
-    min_count, thinnest = _thinnest_stratum(data, model.strata)
+    values, failures = _evaluate_over_scope(identified, model, variables, evaluator)
+    min_count, thinnest = _thinnest_stratum(inner, model.strata)
 
     checked = tuple(
         sorted(
@@ -407,6 +471,7 @@ def estimate(
             level=level,
             seed=seed,
             points=tuple(values),
+            evaluator=evaluator,
         )
 
     return Estimate(
@@ -422,6 +487,8 @@ def estimate(
         bootstrap=bootstrap,
         level=level,
         replicate_failures=replicate_failures,
+        plan=plan,
+        method=method,
     )
 
 
@@ -437,6 +504,7 @@ def _bootstrap_interval(
     level: float,
     seed: int,
     points: tuple[Point, ...],
+    evaluator: Evaluator,
 ) -> tuple[dict[Point, tuple[float, float] | None], int]:
     """Percentile interval over unit-resampled replicates.
 
@@ -452,12 +520,14 @@ def _bootstrap_interval(
 
     for _ in range(replicates):
         replicate = data.resample(rng)
-        inner = replicate.model(footprint, fallbacks=fallbacks, replacements=replacements)
+        inner = EmpiricalModel(
+            replicate, footprint, fallbacks=fallbacks, replacements=replacements
+        )
         model = _AuditingModel(inner, replicate)
         for point in points:
             assignment = dict(zip(variables, point, strict=True))
             try:
-                draws[point].append(evaluate(identified.expression, model, assignment))
+                draws[point].append(evaluator(identified.expression, model, assignment))
             except UndefinedEstimand:
                 failures += 1
             except MissingKernel as missing:  # pragma: no cover - caught in the main pass
