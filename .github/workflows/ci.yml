@@ -40,5 +40,10 @@ jobs:
 
       - name: Import without PYTHONPATH
         # Guards the packaging config specifically: `import causal_hypergraphs` must work
-        # from an install, not only from a checkout with src/ on the path.
-        run: cd "${{ runner.temp }}" && python -c "import causal_hypergraphs; print(causal_hypergraphs.__file__)"
+        # from an install, not only from a checkout with src/ on the path. Every subpackage
+        # is named explicitly -- a top-level import alone would still succeed if a
+        # subpackage were missing from the wheel.
+        run: |
+          cd "${{ runner.temp }}"
+          python -c "import causal_hypergraphs; print(causal_hypergraphs.__file__)"
+          python -c "import causal_hypergraphs.estimation, causal_hypergraphs.semantics, causal_hypergraphs.separation, causal_hypergraphs.identification, causal_hypergraphs.expression, causal_hypergraphs.graph; print('subpackages ok')"

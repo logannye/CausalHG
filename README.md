@@ -43,8 +43,8 @@ P(V) = prod_{v exogenous} P(v) * prod_{m} P(out(m) | in(m))
 and a mechanism intervention is a **local factor swap** — delete one factor and put
 something else in its place. Two operations are supported:
 
-- `delete(m)` — remove the mechanism; its orphaned outputs fall back to declared
-  laws `P0(v)`.
+- `delete(m)` — remove the mechanism; its orphaned outputs fall back to a declared
+  joint policy `P0^m(out(m))`.
 - `replace(m, m')` — keep the wiring, change the function. Requires
   `rho(m') = rho(m)`: same inputs, same outputs.
 
@@ -73,7 +73,7 @@ result = identify(graph, DeleteMechanism("m1"))
 
 if isinstance(result, Identified):
     print(result.theorem)      # T2
-    print(result.expression)   # P(A) * P(B) * P(E) * P(F | C,E) * P0(C) * P0(D)
+    print(result.expression)   # P(A) * P(B) * P(E) * P(F | C,E) * P0_m1(C,D)
     for assumption in result.assumptions:
         print(assumption.code) # C1 C2 C3 C4 P0 Observed boundary Downstream positivity
     for step in result.derivation:
@@ -97,7 +97,7 @@ graph = MechanismGraph(
         "m1": {"inputs": {"A", "B"}, "outputs": {"C", "D"}},
         "m2": {"inputs": {"C", "E"}, "outputs": {"F"}},
     },
-    fallback_variables={"A", "B", "E", "F"},   # no P0 for C or D
+    fallback_variables={"A", "B", "E", "F"},   # no P0 policy covering C or D
 )
 
 result = identify(graph, DeleteMechanism("m1"))
@@ -106,7 +106,8 @@ result.status              # 'unknown'
 result.reason              # 'Mechanism deletion would orphan outputs without a
                            #  declared fallback policy.'
 result.missing_variables   # ('C', 'D')
-result.suggestions[0]      # 'Declare fallback distribution P0(C).'
+result.suggestions[0]      # 'Declare the joint fallback policy P0_m1(C,D) over
+                           #  the orphaned outputs.'
 ```
 
 Three outcomes exist: `Identified`, `Unknown` (this compiler cannot do it, and here
@@ -117,18 +118,69 @@ read an estimand before establishing that you have one.
 ### Evaluating an estimand
 
 An estimand is only meaningful if it can be *computed*. `causal_hypergraphs.semantics`
-evaluates one against a finite discrete model, which is what makes the compiler's
-claims testable rather than merely well-formed:
+evaluates one against a finite discrete model you supply, which is what makes the
+compiler's claims testable rather than merely well-formed:
 
 ```python
 from causal_hypergraphs.semantics import DiscreteModel, evaluate
 
-model = DiscreteModel(domains=..., joint=..., fallbacks={"C": ..., "D": ...})
+model = DiscreteModel(domains=..., joint=..., fallbacks={"m1": {(0, 0): 0.5, ...}})
 value = evaluate(result.expression, model, {"A": 0, "B": 1, "C": 0, "D": 0, "E": 1, "F": 1})
 ```
 
 Evaluation is total or loud: an undefined quantity raises `UndefinedEstimand` rather
 than quietly becoming `nan`.
+
+### Estimating from data
+
+`causal_hypergraphs.estimation` runs the same estimand against an actual dataset, and
+**discharges the estimand's positivity certificates against that dataset**:
+
+```python
+from causal_hypergraphs import Dataset, estimate
+
+data = Dataset.from_records(records, unit="donor")   # or Dataset.from_counts(table, names)
+est = estimate(
+    result, data,
+    fallbacks={"m1": {(0, 0): 0.5, (0, 1): 0.0, (1, 0): 0.0, (1, 1): 0.5}},
+    bootstrap=500,
+)
+
+est.values[(0, 1, 1, 0, 1, 1)]   # the estimated post-intervention probability
+est.interval[(0, 1, 1, 0, 1, 1)] # its 95% unit-bootstrap interval
+print(est.summary())
+```
+
+Three things distinguish this from evaluating a formula:
+
+**Certificates come due.** `identify` records `Target positivity` and `Downstream
+positivity` because they are properties of the distribution, not of the graph. Against
+data they are checkable, and they are checked. A conditioning cell with no observations
+produces a named `SupportFailure`, and the affected points are *absent* from `values`
+rather than present as `nan`:
+
+```text
+Checked against the data:
+  Downstream positivity: FAIL
+  3 of 16 point(s) undefined across 1 empty stratum/strata
+  ! P(F | C,E) undefined at C=1, E=1 (3 point(s) unreachable)
+```
+
+Even when every certificate holds, `support.min_stratum_count` reports the sparsest data
+cell the estimand actually read — a quotient can be perfectly well defined and still rest
+on six rows.
+
+**The unit of independence is declared, not assumed.** `unit=` names what is
+exchangeable, and the bootstrap resamples those, not rows. It matters: on data with 20
+donors contributing 50 correlated rows each, resampling units gives an interval **6.6×
+wider** than resampling rows — close to the √50 = 7.1 the correlation implies. The default
+treats each row as independent, which is the narrowest and most optimistic choice, so the
+estimate always prints which one it used.
+
+**What the data cannot check is stated first.** Positivity is discharged; `C2` — no
+unmeasured confounding across mechanisms — is not, and cannot be. It is the assumption
+most likely to be false and least likely to be noticed once a number is on the screen, so
+`summary()` leads with the unverifiable list and only then reports what was verified.
 
 ## Two forms of the same identifier
 
@@ -207,6 +259,9 @@ theorem, its assumptions, and its derivation attached.
 - Verified replacement incidence when a `Mechanism` is supplied, which discharges the
   `rho(m') = rho(m)` certificate into a derivation step.
 - Finite-discrete semantics for evaluating estimands.
+- A data-facing estimator: `Dataset` (+ declared unit of independence), `estimate`,
+  positivity discharge against the empirical support, and unit-bootstrap intervals
+  measured at 94.3% coverage over 1,568 intervals.
 - `d*`-separation on the bipartite blowup with equality-based determination closure,
   by Bayes-Ball reachability in `O(V + E)`.
 - A deliberately isolated Pearl-ID backend (observational marginals, Markovian
@@ -223,13 +278,9 @@ theorem, its assumptions, and its derivation attached.
 - Complete Pearl-ID beyond the currently implemented backend cases.
 - Cyclic mechanism graphs; Markov-kernel mechanisms; richer role typing
   (substrate / enzyme / product); mechanism-correlated noise.
-- **Joint fallback kernels.** `P0` is a product of per-variable laws, so `delete(m)`
-  necessarily renders `out(m)` mutually independent, and a post-deletion law that
-  preserves coupling among the orphaned outputs cannot be expressed. The
-  generalization to `P0^m(out(m))` is stated in `THEOREM_T2_T3.md` Remark T3.3 and
-  every result goes through with it.
-- Estimators. The discrete semantics evaluates an estimand against a model you
-  supply; nothing estimates the primitive kernels from samples.
+- Estimators for continuous or high-dimensional data. `estimate` handles finite
+  discrete variables; continuous readouts must be binned first, and binning is a
+  modelling choice that can create or destroy the positivity being checked.
 
 ## Status and known gaps
 
@@ -309,6 +360,7 @@ src/causal_hypergraphs/
   identification/   T2/T3/T4/T6 compilers, Pearl-ID backend, T7 track
   separation/       d*-separation and determination closure
   semantics/        finite-discrete evaluation of estimands
+  estimation/       datasets, estimation from data, certificate discharge
 
 minimal_model/      NumPy reference implementation
 tests/              compiler, semantics, and separation tests

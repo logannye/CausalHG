@@ -46,7 +46,7 @@ where:
 - $\rho: E \to 2^V \times 2^V$ assigns each $m$ to its typed incidence $(\mathrm{in}(m), \mathrm{out}(m))$.
 - $F = \{f_m\}_{m \in E}$ where each $f_m: \mathrm{Dom}(\mathrm{in}(m)) \times \mathrm{Dom}(u_m) \to \mathrm{Dom}(\mathrm{out}(m))$ is a deterministic *joint* structural function.
 - $P$ is a product distribution over $U \cup U^{\mathrm{exo}}$.
-- $P_0 = \{P_0(v)\}_{v \in V}$ is a *fallback exogenous distribution* for each variable, used when interventions delete all of $v$'s producing mechanisms (see §6).
+- $P_0 = \{P_0^m\}_{m \in E}$ assigns each mechanism a *fallback policy* $P_0^m$: a joint distribution over $\mathrm{out}(m)$, invoked when an intervention deletes $m$ and orphans its outputs (see §6). It is joint rather than a product of per-variable laws because deletion orphans $\mathrm{out}(m)$ simultaneously; a product policy would make the orphaned outputs independent by definition, and is recovered as the special case where $P_0^m$ factorizes. $P_0^m$ does not condition on $\mathrm{in}(m)$ — deletion removes the mechanism, so its inputs no longer act.
 
 **Reduction to Pearl.** A Pearl SCM is exactly the special case $|\mathrm{out}(m)| = 1$ for all $m \in E$, with $P_0$ trivial (never invoked).
 
@@ -108,9 +108,9 @@ Equivalent to standard Pearl intervention on $B(\mathcal{M})$.
 
 $\mathrm{do}(\neg m)$ produces $\mathcal{M}^{\neg m}$ by:
 - Removing $m$ from $E$.
-- For each $v \in \mathrm{out}(m)$ that has no remaining producer: $v$ enters $V^{\mathrm{exo}}$ with distribution $P_0(v)$.
+- The outputs in $\mathrm{out}(m)$ that have no remaining producer enter $V^{\mathrm{exo}}$ *jointly*, distributed as $P_0^m$. Under C4 that is all of $\mathrm{out}(m)$.
 
-This is the operation Pearl cannot express as a single intervention. Its closest Pearl translation is the *simultaneous* multi-variable intervention $\mathrm{do}(v_1 = P_0, \ldots, v_p = P_0)$ for all $v_i \in \mathrm{out}(m)$ — which is multiple interventions, not one. The distinction matters experimentally: a single drug ablating one enzyme is one experiment, whereas Pearl's translation requires fixing every product simultaneously.
+This is the operation Pearl cannot express as a single intervention. Its closest Pearl translation is the *simultaneous* stochastic multi-variable intervention $\mathrm{do}\!\left((v_1, \ldots, v_p) \sim P_0^m\right)$ over all $v_i \in \mathrm{out}(m)$ — which is multiple interventions, not one, and requires them to be coordinated rather than independent. The distinction matters experimentally: a single drug ablating one enzyme is one experiment, whereas Pearl's translation requires fixing every product simultaneously.
 
 ### 6.3 Mechanism replacement (new)
 
@@ -232,7 +232,7 @@ Beckers-Halpern (2019) abstraction conditions, expressed natively as collapsing 
 | $f_m$ | joint structural function of $m$ |
 | $u_m$ | per-mechanism exogenous noise |
 | $V^{\mathrm{exo}}$ | variables with no producer |
-| $P_0(v)$ | fallback exogenous distribution for $v$ |
+| $P_0^m$ | fallback policy: joint law over $\mathrm{out}(m)$ installed when $m$ is deleted |
 | $G_E$ | mechanism dependency graph |
 | $B(\mathcal{M})$ | bipartite blowup |
 | $\mathcal{I}(\mathcal{M})$ | intervention space |

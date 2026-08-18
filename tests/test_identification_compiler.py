@@ -20,9 +20,9 @@ def test_delete_full_observation_returns_t2_expression() -> None:
     assert isinstance(result, Identified)
     assert result.status == "identified"
     assert result.theorem == "T2"
-    assert str(result.expression) == "P(A) * P(B) * P(E) * P(F | C,E) * P0(C) * P0(D)"
+    assert str(result.expression) == "P(A) * P(B) * P(E) * P(F | C,E) * P0_m1(C,D)"
     assert result.expression.to_latex() == (
-        r"P(A) \cdot P(B) \cdot P(E) \cdot P(F \mid C,E) \cdot P_0(C) \cdot P_0(D)"
+        r"P(A) \cdot P(B) \cdot P(E) \cdot P(F \mid C,E) \cdot P_0^{m1}(C,D)"
     )
     assert any(assumption.code == "C4" for assumption in result.assumptions)
     assert result.derivation[0].label == "Validate graph"
@@ -71,7 +71,7 @@ def test_latent_mechanism_uses_t4_when_all_variables_are_observed() -> None:
 
     assert isinstance(result, Identified)
     assert result.theorem == "T4"
-    assert str(result.expression) == "P(A) * P(C,D | A,B) * P(F | C,E) * P0(B) * P0(E)"
+    assert str(result.expression) == "P(A) * P(C,D | A,B) * P(F | C,E) * P0_m_lat(B,E)"
 
 
 def test_hidden_variable_graph_accepts_observed_boundary_with_t6() -> None:
@@ -79,7 +79,7 @@ def test_hidden_variable_graph_accepts_observed_boundary_with_t6() -> None:
 
     assert isinstance(result, Identified)
     assert result.theorem == "T6"
-    assert str(result.expression) == "P(A,B,C,D,E,F) / P(C,D | A,B) * P0(C) * P0(D)"
+    assert str(result.expression) == "P(A,B,C,D,E,F) / P(C,D | A,B) * P0_m1(C,D)"
     assert any(assumption.code == "Observed boundary" for assumption in result.assumptions)
     # Hidden variables make surviving factors unidentified individually, so T6 must go
     # through the quotient -- and must therefore disclose the positivity it needs.

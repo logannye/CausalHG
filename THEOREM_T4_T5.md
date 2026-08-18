@@ -28,7 +28,7 @@ In a HADMG, two natural intervention regimes arise:
 **Theorem T4.** Let $\mathcal{M}$ be a HADMG with $V^{\mathrm{lat}} = \emptyset$ (all variables observed). Let $m^\star \in E$ be any mechanism — observed or latent. Then $\mathrm{do}(\neg m^\star)$ is identifiable from $P(V)$ via:
 
 $$
-P^{\mathcal{M}^{\neg m^\star}}(V) \;=\; \frac{P(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v).
+P^{\mathcal{M}^{\neg m^\star}}(V) \;=\; \frac{P(V)}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot P_0^{m^\star}\!\left(\mathrm{out}(m^\star)\right).
 $$
 
 The mechanism factor $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ is a conditional distribution in $P(V)$ — directly observable, regardless of whether $m^\star$ is latent or observed.
@@ -43,15 +43,15 @@ $$
 
 Lemma 1.1's proof did not require observability of $f_m$ — only C1–C4 and noise independence. It applies verbatim to HADMGs. Each factor $P(\mathrm{out}(m) \mid \mathrm{in}(m))$ is a well-defined conditional in $P(V)$ since both $\mathrm{out}(m)$ and $\mathrm{in}(m)$ are observed (by $V^{\mathrm{lat}} = \emptyset$).
 
-By the proof of T2 (`THEOREM_T2_T3.md` §2), $\mathrm{do}(\neg m^\star)$ removes the $m^\star$ factor from the product and inserts $P_0(v)$ factors for each orphaned output. The arithmetic is identical:
+By the proof of T2 (`THEOREM_T2_T3.md` §2), $\mathrm{do}(\neg m^\star)$ removes the $m^\star$ factor from the product and inserts the single joint factor $P_0^{m^\star}$ over the orphaned outputs. The arithmetic is identical:
 
 $$
-P^{\neg m^\star}(V) = \left[\prod_{v \in V^{\mathrm{exo}}} P(v)\right] \cdot \left[\prod_{m \in E \setminus \{m^\star\}} P(\mathrm{out}(m) \mid \mathrm{in}(m))\right] \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v).
+P^{\neg m^\star}(V) = \left[\prod_{v \in V^{\mathrm{exo}}} P(v)\right] \cdot \left[\prod_{m \in E \setminus \{m^\star\}} P(\mathrm{out}(m) \mid \mathrm{in}(m))\right] \cdot P_0^{m^\star}\!\left(\mathrm{out}(m^\star)\right).
 $$
 
-**Why this is identifiable.** Every surviving factor is a conditional read off the observational distribution, since all variables are observed; the $P_0$ factors are part of the model specification. No part of the formula refers to $f_m$, $u_m$, or any quantity depending on whether $m^\star$ is observed or latent. $\square$
+**Why this is identifiable.** Every surviving factor is a conditional read off the observational distribution, since all variables are observed; the $P_0^{m^\star}$ factor is part of the model specification. No part of the formula refers to $f_m$, $u_m$, or any quantity depending on whether $m^\star$ is observed or latent. $\square$
 
-The quotient rewriting $P(V) / P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)) \cdot \prod_v P_0(v)$ is Corollary T2.1, and requires the target factor to be positive where the post-intervention law puts mass — a hypothesis that fails exactly when $m^\star$ is deterministic with coupled outputs. See Remark T2.2.
+The quotient rewriting $P(V) / P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)) \cdot P_0^{m^\star}(\mathrm{out}(m^\star))$ is Corollary T2.1, and requires the target factor to be positive where the post-intervention law puts mass — a hypothesis that fails exactly when $m^\star$ is deterministic with coupled outputs. See Remark T2.2.
 
 ### What just happened
 
@@ -114,7 +114,7 @@ Combining T4 and T5:
 
 | Intervention type | Identifying expression under v1 + $V^{\mathrm{lat}} = \emptyset$ |
 |---|---|
-| $\mathrm{do}(\neg m)$ — mechanism deletion | **Closed form (T4):** $P(V) / P(\mathrm{out}(m) \mid \mathrm{in}(m)) \cdot \prod P_0$. Always identifiable; computable in $O(\lvert V \rvert + \lvert E \rvert)$. |
+| $\mathrm{do}(\neg m)$ — mechanism deletion | **Closed form (T4):** $P(V) / P(\mathrm{out}(m) \mid \mathrm{in}(m)) \cdot P_0^{m}$. Always identifiable; computable in $O(\lvert V \rvert + \lvert E \rvert)$. |
 | $\mathrm{do}(m \to m')$ — mechanism replacement | **Closed form (T3 + T4):** same denominator, replacement factor in numerator. |
 | $\mathrm{do}(v = x)$ — variable intervention | **Reduction to Pearl multi-variable ID on $B^\dagger(\mathcal{M})$ (T5).** No new theory required. |
 
@@ -124,7 +124,7 @@ The asymmetry is best stated precisely. It has two distinct components:
 
 **(b) Robustness to hidden mechanisms.** T4's formula is invariant to whether $m^\star$ is observed or latent — only the typed incidence is needed. Variable-intervention identifiability via T5 depends on the specific bidirected-edge structure induced by latent mechanisms in $B^\dagger(\mathcal{M})$.
 
-A natural further question is whether T5 ever yields *unidentifiable* on a HADMG satisfying v1 conventions (C1–C4 + $V^{\mathrm{lat}} = \emptyset$). Under HSCM intervention semantics ($\mathrm{do}(v=x)$ deletes the producing mechanism and orphans siblings to $P_0$), an intervention on any output of a multi-output mechanism corresponds in $B^\dagger(\mathcal{M})$ to a multi-variable intervention spanning the entire output set. This severs all bidirected edges that the latent mechanism would otherwise contribute, eliminating the standard Shpitser-Pearl hedge constructions. We have not been able to exhibit a v1 HADMG on which a variable intervention is genuinely unidentifiable; we conjecture none exist, but state this as observation rather than theorem and do not commit to the claim.
+A natural further question is whether T5 ever yields *unidentifiable* on a HADMG satisfying v1 conventions (C1–C4 + $V^{\mathrm{lat}} = \emptyset$). Under HSCM intervention semantics ($\mathrm{do}(v=x)$ deletes the producing mechanism and orphans siblings under the joint policy $P_0^m$), an intervention on any output of a multi-output mechanism corresponds in $B^\dagger(\mathcal{M})$ to a multi-variable intervention spanning the entire output set. This severs all bidirected edges that the latent mechanism would otherwise contribute, eliminating the standard Shpitser-Pearl hedge constructions. We have not been able to exhibit a v1 HADMG on which a variable intervention is genuinely unidentifiable; we conjecture none exist, but state this as observation rather than theorem and do not commit to the claim.
 
 Under hidden *variables* ($V^{\mathrm{lat}} \neq \emptyset$, treated in `THEOREM_H1_PLUS.md`), the asymmetry sharpens: T6 settles the observed-boundary case in closed form, while T7's boundary-violating case reduces to a Pearl ID problem that *can* genuinely fail (hyper-hedge obstructions).
 
@@ -179,7 +179,7 @@ This is the post-intervention distribution under "deletion of the latent mechani
 
 ## 5. Computational complexity
 
-T4's identifying expression is emitted in $O(|V| + |E|)$ time on a HADMG: walk the mechanism set once, copying every factor but the target's, and retrieve $P_0$. There is no analogue of Pearl's ID-algorithm recursion, and no search of any kind — the expression is read off the graph.
+T4's identifying expression is emitted in $O(|V| + |E|)$ time on a HADMG: walk the mechanism set once, copying every factor but the target's, and retrieve $P_0^{m^\star}$. There is no analogue of Pearl's ID-algorithm recursion, and no search of any kind — the expression is read off the graph.
 
 T5's identifying expression is computed by running Shpitser-Pearl ID on $B^\dagger(\mathcal{M})$, which is polynomial in $|V| + |E|$; the algorithm is complete, and returns a hedge witness rather than failing to terminate when the query is not identifiable (Shpitser & Pearl 2006; Huang & Valtorta 2006).
 

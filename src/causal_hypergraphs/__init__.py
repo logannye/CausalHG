@@ -1,5 +1,6 @@
 """Mechanism-level causal identification over typed hypergraphs."""
 
+from .estimation import Dataset, Estimate, estimate
 from .expression import (
     Expression,
     Fallback,
@@ -55,9 +56,11 @@ __all__ = [
     "Assumption",
     "BipartiteADMG",
     "BipartiteDAG",
+    "Dataset",
     "DeleteMechanism",
     "DeterminationRule",
     "EqualityClosureRule",
+    "Estimate",
     "Expression",
     "Fallback",
     "HedgeWitness",
@@ -86,6 +89,7 @@ __all__ = [
     "build_bipartite_dag",
     "d_separated",
     "deterministic_closure",
+    "estimate",
     "identify",
     "identify_delete_via_t7",
     "identify_effect",

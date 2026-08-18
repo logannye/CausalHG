@@ -41,7 +41,7 @@ We say $m^\star$ has an **observed boundary** if $\partial m^\star \subseteq V^{
 **Theorem T6.** Let $\mathcal{M}$ be a HADMG with hidden variables. Let $m^\star \in E$ satisfy the observed-boundary condition $\partial m^\star \subseteq V^{\mathrm{obs}}$. Then $\mathrm{do}(\neg m^\star)$ is identifiable from $P(V^{\mathrm{obs}})$ via:
 
 $$
-P^{\mathcal{M}^{\neg m^\star}}(V^{\mathrm{obs}}) \;=\; \frac{P(V^{\mathrm{obs}})}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v).
+P^{\mathcal{M}^{\neg m^\star}}(V^{\mathrm{obs}}) \;=\; \frac{P(V^{\mathrm{obs}})}{P\!\left(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star)\right)} \cdot P_0^{m^\star}\!\left(\mathrm{out}(m^\star)\right).
 $$
 
 The mechanism factor $P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))$ is read off as a conditional in $P(V^{\mathrm{obs}})$.
@@ -67,13 +67,13 @@ The first equality uses $\mathrm{in}(m^\star) \subseteq Z$; the second uses nois
 **Combining.** Apply T2 in its full-joint form:
 
 $$
-P^{\mathcal{M}^{\neg m^\star}}(V) = \frac{P(V)}{P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))} \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v).
+P^{\mathcal{M}^{\neg m^\star}}(V) = \frac{P(V)}{P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))} \cdot P_0^{m^\star}\!\left(\mathrm{out}(m^\star)\right).
 $$
 
 By Fact T6a, the denominator is well-defined and equals the mechanism factor. By Fact T6b, the denominator does not depend on $V^{\mathrm{lat}}$ — it can be pulled outside the integral when marginalizing:
 
 $$
-P^{\mathcal{M}^{\neg m^\star}}(V^{\mathrm{obs}}) = \int P^{\mathcal{M}^{\neg m^\star}}(V) \, dV^{\mathrm{lat}} = \frac{1}{P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))} \cdot \prod_{v \in \mathrm{out}(m^\star)} P_0(v) \cdot \int P(V) \, dV^{\mathrm{lat}}.
+P^{\mathcal{M}^{\neg m^\star}}(V^{\mathrm{obs}}) = \int P^{\mathcal{M}^{\neg m^\star}}(V) \, dV^{\mathrm{lat}} = \frac{1}{P(\mathrm{out}(m^\star) \mid \mathrm{in}(m^\star))} \cdot P_0^{m^\star}\!\left(\mathrm{out}(m^\star)\right) \cdot \int P(V) \, dV^{\mathrm{lat}}.
 $$
 
 The last integral is $P(V^{\mathrm{obs}})$. Substituting yields T6. □
@@ -98,7 +98,7 @@ $$
 
 — or some closed sufficient sub-query — is identifiable in the bipartite-blowup ADMG $B^\dagger(\mathcal{M})$ via Shpitser-Pearl 2006's ID algorithm.
 
-*Proof sketch.* Mechanism deletion in $\mathcal{M}$ corresponds, under the bipartite blowup, to a *stochastic intervention* on $\mathrm{out}(m^\star)$ in $B^\dagger(\mathcal{M})$ — assigning each output its $P_0$ distribution. Stochastic interventions reduce to standard $\mathrm{do}$-interventions for identifiability purposes (Pearl 2009, Bareinboim-Pearl 2016). The post-intervention observed marginal $P^{\neg m^\star}(V^{\mathrm{obs}})$ is identifiable in $\mathcal{M}$ iff the corresponding stochastic-intervention marginal is identifiable in $B^\dagger(\mathcal{M})$. By the soundness and completeness of Shpitser-Pearl's ID algorithm for Pearl ADMGs, this reduces to a hedge search on $B^\dagger(\mathcal{M})$. □
+*Proof sketch.* Mechanism deletion in $\mathcal{M}$ corresponds, under the bipartite blowup, to a *stochastic intervention* on $\mathrm{out}(m^\star)$ in $B^\dagger(\mathcal{M})$ — resampling the output tuple jointly from $P_0^{m^\star}$. Stochastic interventions reduce to standard $\mathrm{do}$-interventions for identifiability purposes (Pearl 2009, Bareinboim-Pearl 2016). The post-intervention observed marginal $P^{\neg m^\star}(V^{\mathrm{obs}})$ is identifiable in $\mathcal{M}$ iff the corresponding stochastic-intervention marginal is identifiable in $B^\dagger(\mathcal{M})$. By the soundness and completeness of Shpitser-Pearl's ID algorithm for Pearl ADMGs, this reduces to a hedge search on $B^\dagger(\mathcal{M})$. □
 
 T7 is a *reduction*, not a new identifiability theorem. It says the boundary-violating case contains nothing new in principle — Pearl's existing machinery, applied to the right Pearl ADMG, settles the question.
 

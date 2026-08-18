@@ -121,7 +121,10 @@ def _unknown_boundary(graph: MechanismGraph, target: str, missing: tuple[str, ..
 def _unknown_fallback(target: str, missing: tuple[str, ...]) -> Unknown:
     return Unknown(
         reason="Mechanism deletion would orphan outputs without a declared fallback policy.",
-        suggestions=tuple(f"Declare fallback distribution P0({variable})." for variable in missing),
+        suggestions=(
+            f"Declare the joint fallback policy P0_{target}({','.join(missing)}) over the "
+            "orphaned outputs.",
+        ),
         missing_variables=missing,
         assumptions=CORE_ASSUMPTIONS,
         derivation=(ProofStep("Fallback check", f"{target!r} lacks P0 for {list(missing)}."),),
@@ -147,9 +150,15 @@ def _identify_delete(
         return _unknown_fallback(query.target, missing_fallback)
 
     theorem = _theorem(graph, observed, replacement=False)
-    fallbacks = [Fallback(v) for v in target.outputs]
+    # One joint policy over all orphaned outputs, not one per variable: deletion orphans
+    # `out(m*)` simultaneously, and a per-variable product would force them independent.
+    fallbacks = [Fallback(query.target, target.outputs)]
     common = CORE_ASSUMPTIONS + (
-        Assumption("P0", "Fallback distributions are specified for orphaned outputs."),
+        Assumption(
+            "P0",
+            "A joint fallback policy P0^m(out(m)) is specified for the deleted "
+            "mechanism's orphaned outputs.",
+        ),
         Assumption("Observed boundary", "Target mechanism inputs and outputs are observed."),
     )
     validate_step = ProofStep("Validate graph", "C1-C4 passed during MechanismGraph construction.")
@@ -179,8 +188,9 @@ def _identify_delete(
             ProofStep(
                 "Omit target factor",
                 f"Drop P({','.join(target.outputs)} | {','.join(target.inputs)}) from the "
-                "product and multiply by the fallback output factors. No division by the "
-                "target factor is performed.",
+                f"product and multiply by the joint fallback factor "
+                f"P0_{query.target}({','.join(target.outputs)}). No division by the target "
+                "factor is performed.",
             ),
         )
         return Identified(
@@ -220,7 +230,8 @@ def _identify_delete(
         ),
         ProofStep(
             "Swap factor",
-            "Divide it out of P(O) and multiply by the fallback output factors.",
+            f"Divide it out of P(O) and multiply by the joint fallback factor "
+            f"P0_{query.target}({','.join(target.outputs)}).",
         ),
     )
     return Identified(
