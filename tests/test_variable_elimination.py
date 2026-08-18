@@ -861,6 +861,19 @@ def test_a_sparse_gene_network_is_affordable_near_the_intervention_and_not_far_f
             break
         frontier = nxt
 
+    # The published table, pinned row by row. Three aggregate bounds left six of these
+    # nine rows free to drift while the gate stayed green, and the README prints all nine
+    # -- so the numbers a reader sees were not the numbers a test checked. The network is
+    # seeded, so this is reproducible rather than merely observed.
+    expected = (
+        # hop: (ancestry, largest elimination table)
+        (7, 16), (16, 16), (25, 16), (98, 32), (106, 32), (111, 64),
+        (174, 1_024), (292, 2**25), (381, 2**37),
+    )
+    assert tuple(near) + tuple(far) == expected, (near, far)
+
+    # The claims those rows are cited for, stated separately from the values themselves:
+    # a table that changed shape should fail above, not silently satisfy a bound here.
     widest_near_ancestry = max(footprint for footprint, _ in near)
     largest_near_table = max(entries for _, entries in near)
     assert widest_near_ancestry > 100, near

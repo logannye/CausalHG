@@ -31,7 +31,15 @@ LEVEL = 0.95
 # Monte Carlo error. 40 models x 8 points is enough to separate a calibrated interval from
 # a badly miscalibrated one without flagging ordinary percentile-bootstrap conservatism.
 COVERAGE_MODELS = 40
-MIN_COVERAGE = 0.85
+MIN_COVERAGE = 0.90
+MAX_COVERAGE = 0.98
+"""Two-sided, because calibration fails in both directions.
+
+A floor alone passes an interval that is merely wide: covering 100% of the time means the
+interval is uninformative, not that it is good. The measured value is 94.3% against a
+nominal 95%, and both bounds sit close enough to catch a real regression -- the old 0.85
+floor would have accepted a drop to 86% without a word.
+"""
 
 
 def _graph() -> MechanismGraph:
@@ -157,8 +165,11 @@ def test_bootstrap_coverage_is_near_nominal() -> None:
 
     assert total > 200, f"only {total} interval(s) checked; the gate is nearly vacuous"
     coverage = covered / total
-    assert coverage >= MIN_COVERAGE, (
-        f"95% intervals covered the truth {coverage:.1%} of the time over {total} points"
+    assert MIN_COVERAGE <= coverage <= MAX_COVERAGE, (
+        f"95% intervals covered the truth {coverage:.1%} of the time over {total} points, "
+        f"outside [{MIN_COVERAGE:.0%}, {MAX_COVERAGE:.0%}]. Under-coverage licenses "
+        f"confidence the data do not support; over-coverage means the interval is wide "
+        f"enough to be uninformative. Both are calibration failures."
     )
 
 
@@ -202,10 +213,17 @@ def test_declaring_the_unit_of_independence_widens_the_interval() -> None:
     honest_width = _width(honest, point)
     overconfident_width = _width(overconfident, point)
 
-    assert honest_width > 3.0 * overconfident_width, (
+    # Two-sided, and centred on the quantity theory predicts rather than on "bigger".
+    # Every row within a donor is identical here, so 50 rows carry one donor's worth of
+    # information and the widths should differ by about sqrt(50) = 7.07. A one-sided
+    # `> 3.0x` gate would pass a ratio of 3 -- half the predicted value -- and call it
+    # confirmation. Measured: 6.56x.
+    ratio = honest_width / overconfident_width
+    assert 4.5 < ratio < 9.5, (
         f"unit bootstrap width {honest_width:.4f} vs row bootstrap "
-        f"{overconfident_width:.4f}: resampling rows instead of units barely changed the "
-        "interval, so the declared unit is not affecting the answer"
+        f"{overconfident_width:.4f} is a ratio of {ratio:.2f}, away from the "
+        f"sqrt({rows_per_donor}) = {rows_per_donor ** 0.5:.2f} the within-donor "
+        f"correlation implies"
     )
     assert "donor" in honest.unit
     assert "row" in overconfident.unit

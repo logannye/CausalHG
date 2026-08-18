@@ -6,6 +6,8 @@ from causal_hypergraphs import (
     DeleteMechanism,
     Identified,
     MechanismGraph,
+    Unknown,
+    check_covariates,
     estimate,
     identify,
 )
@@ -74,3 +76,122 @@ def test_readme_estimation_snippet_smoke() -> None:
     assert "Checked against the data" in summary
     # Both certificate codes the README names must be the ones the estimator recognizes.
     assert est.support.checked == ("Downstream positivity",)
+
+
+def test_readme_names_are_importable_from_the_top_level_package() -> None:
+    """A README that shows a bare call the top-level package cannot supply is a dead end.
+
+    `plan_elimination` is printed in the cost section with no import line, and it did not
+    live on the package root -- so the natural `from causal_hypergraphs import
+    plan_elimination` raised `ImportError` and the README never printed the path that
+    works. Every name the README uses in a code block must resolve from one import.
+    """
+    import causal_hypergraphs
+
+    for name in ("plan_elimination", "check_covariates", "identify_expectation"):
+        assert hasattr(causal_hypergraphs, name), name
+        assert name in causal_hypergraphs.__all__, f"{name} is reachable but undeclared"
+
+
+def test_readme_feedback_loop_block() -> None:
+    """The cyclic-graph block, including the component ordering it prints.
+
+    The README claimed `(('m1', 'm2'), ('far',))`. Components come back sorted, so the
+    real answer leads with `far` -- and being sorted is the documented guarantee that a
+    cost or a refusal never varies with dictionary ordering, which makes a wrong printed
+    order a claim about determinism, not a typo.
+    """
+    graph = MechanismGraph(
+        variables={"a", "b", "Y", "q", "R"},
+        mechanisms={
+            "m1": {"inputs": {"a"}, "outputs": {"b"}},
+            "m2": {"inputs": {"b"}, "outputs": {"a"}},
+            "m3": {"inputs": {"b"}, "outputs": {"Y"}},
+            "far": {"inputs": {"q"}, "outputs": {"R"}},
+        },
+    )
+
+    assert graph.cyclic_mechanisms == frozenset({"m1", "m2"})
+    assert graph.mechanism_components() == (("far",), ("m1", "m2"), ("m3",))
+    assert isinstance(identify(graph, DeleteMechanism("far", outcomes={"R"})), Identified)
+    assert isinstance(identify(graph, DeleteMechanism("m1", outcomes={"Y"})), Unknown)
+
+
+def test_readme_covariate_block_prints_what_the_readme_shows() -> None:
+    """Three literal differences hid here: a dropped header, a truncated sentence, and
+    `not a proof:` where the code says `not a proof of harm:`.
+
+    The distinction the last one carries is the whole point of the section -- d-separation
+    is sound but complete only under faithfulness, so a detected path is a warning and not
+    a demonstration that adjusting does harm.
+    """
+    graph = MechanismGraph(
+        variables={"donor", "stim", "batch", "TF", "exhaustion_marker", "IFNG"},
+        mechanisms={
+            "knockdown": {"inputs": {"donor", "stim"}, "outputs": {"TF"}},
+            "m_marker": {"inputs": {"TF"}, "outputs": {"exhaustion_marker"}},
+            "m_ifng": {"inputs": {"TF", "batch"}, "outputs": {"IFNG"}},
+        },
+    )
+
+    summary = check_covariates(
+        graph,
+        DeleteMechanism("knockdown"),
+        "IFNG",
+        ["donor", "stim", "exhaustion_marker", "batch"],
+    ).summary()
+
+    assert "Conditioning around do(knockdown) with outcome 'IFNG':" in summary
+    assert "Structural, not an assumption." in summary
+    assert "this is not a proof of harm:" in summary
+    assert "Admissible: ['donor', 'stim', 'batch']" in summary
+
+
+def test_readme_empty_stratum_block_reports_the_counts_it_prints() -> None:
+    """`3 of 16 point(s) undefined` was impossible for this estimand: the scope is 64
+    points and an empty (C=1, E=1) cell takes out every one of the 16 that names it.
+
+    Worse, the block above it indexed a point inside that very stratum, so a reader
+    following the README in order would have hit a `KeyError` on the line after the one
+    telling them the cell was empty.
+    """
+    graph = MechanismGraph(
+        variables={"A", "B", "C", "D", "E", "F"},
+        mechanisms={
+            "m1": {"inputs": {"A", "B"}, "outputs": {"C", "D"}},
+            "m2": {"inputs": {"C", "E"}, "outputs": {"F"}},
+        },
+    )
+    result = identify(graph, DeleteMechanism("m1"))
+    assert isinstance(result, Identified)
+
+    rng = random.Random(0)
+    records = []
+    for index in range(3_000):
+        c = rng.randint(0, 1)
+        records.append(
+            {
+                "A": rng.randint(0, 1),
+                "B": rng.randint(0, 1),
+                "C": c,
+                "D": rng.randint(0, 1),
+                # (C=1, E=1) never co-occurs, so that conditioning cell is empty while
+                # both columns still show both levels.
+                "E": 0 if c == 1 else rng.randint(0, 1),
+                "F": rng.randint(0, 1),
+                "donor": f"d{index % 20}",
+            }
+        )
+
+    est = estimate(
+        result,
+        Dataset.from_records(records, unit="donor"),
+        fallbacks={"m1": {(0, 0): 0.5, (0, 1): 0.0, (1, 0): 0.0, (1, 1): 0.5}},
+    )
+    summary = est.summary()
+
+    assert "Downstream positivity: FAIL" in summary
+    assert "16 of 64 point(s) undefined across 1 empty stratum/strata" in summary
+    assert "! P(F | C,E) undefined at C=1, E=1 (16 point(s) unreachable)" in summary
+    # Absent, never nan: the affected points are not in `values` at all.
+    assert (0, 1, 1, 0, 1, 1) not in est.values
