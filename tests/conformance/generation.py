@@ -156,6 +156,23 @@ class RandomModel:
             result[tuple(x[v] for v in self.variables)] = self._law(x, {target: fallback})
         return result
 
+    def sample_counts(
+        self, law: Mapping[Point, float], n_rows: int, rng: random.Random
+    ) -> dict[Point, int]:
+        """Draw `n_rows` observations from `law`, returned as a contingency table.
+
+        Counts rather than rows because the estimator accepts a contingency table
+        directly, and because a sweep that materializes hundreds of thousands of row dicts
+        spends its time in allocation rather than in the property under test.
+        """
+        cells = sorted(law)
+        weights = [law[cell] for cell in cells]
+        drawn = rng.choices(cells, weights=weights, k=n_rows)
+        tally: dict[Point, int] = {}
+        for cell in drawn:
+            tally[cell] = tally.get(cell, 0) + 1
+        return tally
+
     def non_factorizing_fallbacks(self) -> tuple[str, ...]:
         """Mechanisms whose deletion policy is not a product of its own marginals.
 

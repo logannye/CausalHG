@@ -154,7 +154,11 @@ def _identify_delete(
     # `out(m*)` simultaneously, and a per-variable product would force them independent.
     fallbacks = [Fallback(query.target, target.outputs)]
     common = CORE_ASSUMPTIONS + (
-        Assumption("P0", "Fallback distributions are specified for orphaned outputs."),
+        Assumption(
+            "P0",
+            "A joint fallback policy P0^m(out(m)) is specified for the deleted "
+            "mechanism's orphaned outputs.",
+        ),
         Assumption("Observed boundary", "Target mechanism inputs and outputs are observed."),
     )
     validate_step = ProofStep("Validate graph", "C1-C4 passed during MechanismGraph construction.")
