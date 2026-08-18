@@ -36,7 +36,13 @@ from causal_hypergraphs.estimation import (
     UnsupportedEstimand,
     estimate,
 )
-from causal_hypergraphs.examples import frontdoor_hidden_boundary_graph
+from causal_hypergraphs.examples import (
+    frontdoor_hidden_boundary_graph,
+    hidden_variable_graph,
+    latent_mechanism_graph,
+    reaction_graph,
+)
+from causal_hypergraphs.expression import Quotient
 from tests.conformance.generation import generate_model
 
 BINARY = (0, 1)
@@ -335,18 +341,12 @@ def test_discharged_codes_are_codes_the_compiler_actually_emits() -> None:
     longer exists. So the list is pinned against the codes the compiler emits, collected by
     running it rather than by writing them down a second time.
     """
-    emitted: set[str] = set()
-    for seed in range(60):
-        model = generate_model(seed)
-        graph = model.graph()
-        for spec in model.mechanisms:
-            for query in (
-                DeleteMechanism(spec.name),
-                ReplaceMechanism(spec.name, f"{spec.name}_prime"),
-            ):
-                result = identify(graph, query)
-                if isinstance(result, Identified):
-                    emitted.update(a.code for a in result.assumptions)
+    # The same population the result-contract test uses, which is the point: a code listed
+    # here is only pinned if some branch that emits it is actually reached. The old sweep
+    # ran generated models with `allow_t7` left off, so no T7 result appeared and a
+    # T7-only certificate could have been listed as dischargeable while nothing emitted it.
+    emitted = {code for _, result in _identified_results() for code in
+               (a.code for a in result.assumptions)}
 
     unknown = DISCHARGEABLE_CODES - emitted
     assert not unknown, (
@@ -362,18 +362,8 @@ def test_every_positivity_certificate_the_compiler_emits_is_dischargeable() -> N
     compiler grows a certificate about support that this module does not discharge, that
     should surface here rather than as a summary quietly listing it under 'not checked'.
     """
-    emitted: set[str] = set()
-    for seed in range(60):
-        model = generate_model(seed)
-        graph = model.graph()
-        for spec in model.mechanisms:
-            for query in (
-                DeleteMechanism(spec.name),
-                ReplaceMechanism(spec.name, f"{spec.name}_prime"),
-            ):
-                result = identify(graph, query)
-                if isinstance(result, Identified):
-                    emitted.update(a.code for a in result.assumptions)
+    emitted = {code for _, result in _identified_results() for code in
+               (a.code for a in result.assumptions)}
 
     positivity_like = {code for code in emitted if "positivity" in code.lower()}
     assert positivity_like, "no positivity certificate was emitted; this gate is vacuous"
@@ -426,3 +416,117 @@ def test_a_t7_estimate_leads_with_the_model_conditions_like_every_other_branch()
     not_checked, _, _ = est.summary().partition("Checked against the data")
     assert "C2" in not_checked, est.summary()
     assert "independent exogenous noise" in not_checked.lower(), est.summary()
+
+
+# --- the result contract ----------------------------------------------------------
+
+POSITIVITY_CODES = frozenset({"Target positivity", "Downstream positivity", "Backend positivity"})
+
+
+def _needs_a_positive_stratum(expression) -> bool:
+    """Whether evaluating this estimand divides by, or conditions on, anything.
+
+    Computed from the AST rather than listed. `kernels()` is the expression algebra's own
+    recursive collector, so a kernel carrying `given` is exactly a conditional that needs a
+    non-empty stratum, and a `Quotient` is a division that needs a non-zero denominator. A
+    new node type that reads a conditional is covered the moment it reports its kernels.
+    """
+    if any(kernel.given for kernel in expression.kernels()):
+        return True
+
+    found = False
+
+    def walk(node) -> None:
+        nonlocal found
+        if isinstance(node, Quotient):
+            found = True
+        for factor in getattr(node, "factors", ()) or ():
+            walk(factor)
+        for attribute in ("numerator", "denominator", "expression"):
+            child = getattr(node, attribute, None)
+            if child is not None and hasattr(child, "kernels"):
+                walk(child)
+
+    walk(expression)
+    return found
+
+
+def _identified_results():
+    """Every `Identified` the compiler produces over the corpora available to this file.
+
+    Generated models cover the factored branches. They do *not* cover a T7 estimand that
+    conditions on anything -- with `allow_t7=True` the generator yields only estimands of
+    the form `sum_{...} P(v0) * P0_m(...)` -- so the worked example graphs are included,
+    which is where the Pearl-composed estimands live. Same reason
+    `tests/test_shpitser_id.py` carries a literature corpus.
+    """
+    for seed in range(30):
+        model = generate_model(seed)
+        graph = model.graph()
+        for spec in model.mechanisms:
+            for query in (
+                DeleteMechanism(spec.name),
+                DeleteMechanism(spec.name, outcomes={model.observed[0]}),
+                ReplaceMechanism(spec.name, f"{spec.name}_prime"),
+            ):
+                for allow_t7 in (False, True):
+                    result = identify(graph, query, allow_t7=allow_t7)
+                    if isinstance(result, Identified):
+                        yield f"seed {seed}/{spec.name}/{type(query).__name__}", result
+
+    for name, graph in (
+        ("frontdoor", frontdoor_hidden_boundary_graph()),
+        ("hidden_variable", hidden_variable_graph()),
+        ("latent_mechanism", latent_mechanism_graph()),
+        ("reaction", reaction_graph()),
+    ):
+        for mechanism in sorted(graph.mechanisms):
+            for outcomes in [()] + [(v,) for v in sorted(graph.variable_set)]:
+                query = DeleteMechanism(mechanism, outcomes=outcomes)
+                for allow_t7 in (False, True):
+                    try:
+                        result = identify(graph, query, allow_t7=allow_t7)
+                    except ValueError:
+                        continue
+                    if isinstance(result, Identified):
+                        yield f"{name}/{mechanism}/{outcomes}", result
+
+
+def test_an_estimand_that_conditions_on_something_records_a_positivity_certificate() -> None:
+    """The contract the conformance harness states, applied to every branch that answers.
+
+    `test_conformance_identifier.py` puts it plainly: an estimand that cannot be evaluated
+    while recording no positivity certificate is an *undisclosed requirement*, and that is
+    the defect the harness exists to prevent. Its sweep enforces it only for the branches
+    generated models reach, and the T7 path is not one of them.
+
+    So the branch that composes a Pearl sub-result sat outside the contract: it returns
+    `sum_{X} P0(X) * sum_{X',Z} P(X') * P(Y | X',Z) * P(Z | X)` -- two conditionals -- while
+    recording nothing about positivity, and an estimate of it prints `(this estimand carries
+    no dischargeable certificate)` on the line above a named support failure.
+    """
+    offenders = [
+        f"{where}: {result.theorem} -- {result.expression}"
+        for where, result in _identified_results()
+        if _needs_a_positive_stratum(result.expression)
+        and not ({a.code for a in result.assumptions} & POSITIVITY_CODES)
+    ]
+    assert not offenders, (
+        f"{len(offenders)} identified estimand(s) condition on or divide by something while "
+        f"recording no positivity certificate:\n  " + "\n  ".join(sorted(set(offenders))[:10])
+    )
+
+
+def test_the_contract_test_can_actually_see_a_conditioning_t7_estimand() -> None:
+    """A contract whose population never contains the shape it governs is decoration.
+
+    The generator cannot produce a T7 estimand that conditions on anything, so without the
+    worked-example graphs the assertion above would pass over a population in which the
+    branch it was written for does not appear.
+    """
+    reached = [
+        where
+        for where, result in _identified_results()
+        if result.theorem == "T7" and _needs_a_positive_stratum(result.expression)
+    ]
+    assert reached, "no conditioning T7 estimand in the population; the contract is vacuous"

@@ -392,9 +392,12 @@ print(est.summary())
 
 Three things distinguish this from evaluating a formula:
 
-**Certificates come due.** `identify` records `Target positivity` and `Downstream
-positivity` because they are properties of the distribution, not of the graph. Against
-data they are checkable, and they are checked. A conditioning cell with no observations
+**Certificates come due.** `identify` records `Target positivity`, `Downstream positivity`
+and — on the T7/Pearl branch — `Backend positivity`, because they are properties of the
+distribution, not of the graph. Against data they are checkable, and they are checked.
+Which branch answered does not change that: an estimand that conditions on something while
+recording no positivity certificate is an undisclosed requirement, and a test asserts that
+no branch produces one. A conditioning cell with no observations
 produces a named `SupportFailure`, and the affected points are *absent* from `values`
 rather than present as `nan`:
 
@@ -570,7 +573,7 @@ theorem, its assumptions, and its derivation attached.
 
 ## Status and known gaps
 
-The suite is `311 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
+The suite is `313 passed, 1 xfailed`, with ruff and CI on Python 3.11 and 3.13.
 
 Correctness is established by a randomized differential harness (`tests/conformance/`)
 rather than by comparing rendered strings. It generates models satisfying C1–C4 with

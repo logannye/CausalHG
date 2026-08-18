@@ -393,6 +393,17 @@ CORE_T7_ASSUMPTIONS = (
 T7_ASSUMPTIONS = (
     Assumption("T7 reduction", "Boundary-violating mechanism query is reduced to Pearl ID."),
     Assumption("Stochastic deletion", "Mechanism deletion inserts fallback factors for outputs."),
+    Assumption(
+        "Backend positivity",
+        "Every conditioning stratum the identifying formula reads has positive "
+        "observational probability, so each conditional in it is estimable there. The "
+        "factored identifiers condition on one mechanism's inputs at a time, which is why "
+        "their certificate is stated per surviving factor; an ID formula's conditionals are "
+        "assembled by the backend and need not correspond to any single mechanism, so this "
+        "is stated over the estimand as a whole. It is discharged the same way as the "
+        "others -- against whatever cells the evaluator actually touches -- and without it "
+        "this branch returned numbers carrying no checkable certificate at all.",
+    ),
 )
 
 
