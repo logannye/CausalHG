@@ -4,7 +4,7 @@
 
 ## Abstract
 
-We develop a strict generalization of Pearl's structural causal models in which mechanisms — typed hyperedges with multiple inputs and multiple jointly-produced outputs — are first-class causal objects. The framework is motivated by domains where Pearl's three structural assumptions (single-output equations, dyadic edges, node-level DAG) fail to faithfully capture the underlying causal structure: chemical reactions with stoichiometric coupling, regulatory pathways, n-ary knowledge-base relations, and multi-target therapeutic interventions.
+We develop a reformulation of Pearl's structural causal models in which mechanisms — typed hyperedges with multiple inputs and multiple jointly-produced outputs — are first-class causal objects. It is **not** a strict generalization, and we state that at the outset because the framing invites the opposite reading: Pearl with sufficient latents is universal, and our intervention space is a *subset* of the $\sigma$-calculus of Correa & Bareinboim (2020), which may also rewire a mechanism's parent set where $\mathrm{do}(m \to m')$ pins the incidence. The framework is motivated by domains where Pearl's three structural assumptions (single-output equations, dyadic edges, node-level DAG) fail to faithfully capture the underlying causal structure: chemical reactions with stoichiometric coupling, regulatory pathways, n-ary knowledge-base relations, and multi-target therapeutic interventions.
 
 The contribution is not new expressive power — Pearl with sufficient latents is universal — but **first-class addressability** of mechanisms, which strictly extends the intervention vocabulary and yields closed-form identifiers where Pearl's translation requires multi-variable case analysis. We prove three foundational results: a graphical Markov property via a bipartite-blowup construction (T1), a mechanism-level chain rule yielding identifiability of mechanism deletion and replacement under causal sufficiency (T2, T3), and an asymmetry between mechanism-level and variable-level interventions in the presence of hidden mechanisms (T4) — mechanism deletion admits a single closed-form identifier under standard noise-independence assumptions, requiring no Pearl-style hedge analysis. We extend this to hidden-variable HADMGs under a clean boundary condition (T6), and reduce the boundary-violating case to standard Pearl ADMG identification on the bipartite blowup (T7), where genuine unidentifiability via a hyper-hedge becomes possible.
 
@@ -68,6 +68,8 @@ Under C1–C4 the connection is tighter than a comparison. Proposition T4.0 (`TH
 
 The operation $\mathrm{do}(m \to m')$ is not new, and we should be precise about what is. Tian & Pearl (2001) introduced *mechanism change* as an intervention primitive and used it for causal discovery. Correa & Bareinboim (2020) develop the $\sigma$-calculus for *soft* (stochastic, conditional) interventions, in which a structural function is replaced by another kernel; they give an identification algorithm and completeness results for soft transportability. Eberhardt & Scheines (2007) analyse soft versus hard interventions for discovery. Dawid's decision-theoretic framework and Spirtes-Glymour-Scheines policy variables express related ideas in different notation.
 
+Closer still, and prior to all of the above for our purposes: **Shpitser & Tchetgen Tchetgen (2016)** develop a graphical hierarchy of interventions in which node interventions sit inside **edge** interventions, which sit inside path interventions. Their edge intervention is a mechanism-level operation in our sense — it alters the function along specified edges while leaving the rest of the system intact — and they give both an *edge g-formula* and the graphical obstruction to identification, the **recanting witness**. Yao & Evans (2022) give necessary and sufficient conditions for identifying the post-edge-deletion covariance in linear SEMs. Mechanism-level identification theory is therefore roughly a decade old, and our contribution must be stated against it rather than as though the territory were empty: what we add is the *typed hypergraph* carrier — an edge in their sense is dyadic, so a mechanism with several jointly-produced outputs is a set of edges rather than one object — together with a compiler that emits the estimand, its assumptions and its refusal as machine-checkable artifacts. We do not claim priority on intervening at the level of a mechanism.
+
 Measured against that literature, the $\sigma$-intervention is strictly more general than ours: it may change a mechanism's parent set, whereas $\mathrm{do}(m \to m')$ pins $\rho(m') = \rho(m)$. Our intervention space is in that sense a *subset*, not a superset, and the same is true of $\mathrm{do}(\neg m)$, which is a $\sigma$-intervention on $\mathrm{out}(m)$ with the input-free joint kernel $P_0^{m}$.
 
 Two things remain ours. First, incidence preservation is a genuine restriction with content — it is what makes "the same reaction, catalysed differently" a well-typed query and "a different reaction" a type error, which is the discipline a $\sigma$-intervention does not impose. Second, and more importantly, the unit of intervention is a first-class named object with a declared input/output boundary, so a query names a mechanism rather than a set of variables plus a kernel. That is a claim about vocabulary and auditability, not about expressive power or identification strength, and it should not be read as either.
@@ -84,7 +86,11 @@ The hypergraph framework is a natural setting for causal abstraction in the sens
 
 ### 2.4 Hypergraph machine learning
 
-A separate, large body of work addresses hypergraph-structured neural networks: AllSet and AllSetTransformer (Chien et al. 2022), HGNN+ (Gao et al. 2022), the Hypergraph Transformer (Kim et al. 2022), and — implicitly — AlphaFold 2's Evoformer (Jumper et al. 2021). These systems are *descriptive*: they learn representations of hypergraph data without committing to a causal interpretation. Our framework is the first, to our knowledge, to develop a causal theory of hypergraph SCMs. The connection to hypergraph ML is a direction for future work; a "causal hypergraph transformer" with attention biases respecting typed incidence and do-operators as structured masking would be a natural target.
+A separate, large body of work addresses hypergraph-structured neural networks: AllSet and AllSetTransformer (Chien et al. 2022), HGNN+ (Gao et al. 2022), the Hypergraph Transformer (Kim et al. 2022), and — implicitly — AlphaFold 2's Evoformer (Jumper et al. 2021). These architectures are *descriptive*: they learn representations of hypergraph data without committing to a causal interpretation.
+
+That characterization does **not** extend to hypergraph-structured causal inference, and it would be wrong to imply it does. **Ma et al. (2022)** estimate individual treatment effects on hypergraphs under higher-order *interference* — their hyperedges are spillover channels carrying one unit's treatment to another unit's outcome, and the causal quantity is an ITE under interference. It is genuinely causal work on hypergraphs. What it is not is a structural causal model whose hyperedges *are* the mechanisms: their hyperedges relate units, ours relate variables within a unit, and no intervention in their setting addresses a hyperedge as the object being changed. Our claim is therefore the narrower one — a causal theory of hypergraph *SCMs*, in which the hyperedge is the intervened object — and it should be read with Ma et al. in view rather than as a claim about an empty field.
+
+The connection to hypergraph ML is a direction for future work; a "causal hypergraph transformer" with attention biases respecting typed incidence and do-operators as structured masking is a natural target. We flag that the premise is empirical and unsettled: whether hypergraph structure is load-bearing for a *trained* model is a separate question from whether it is load-bearing for identification, and a negative answer to the first would leave the results of this paper untouched.
 
 ### 2.5 Petri nets and chemical reaction networks
 
@@ -376,7 +382,7 @@ A direction connecting the framework to hypergraph machine learning. AllSet (Chi
 
 ## 10. Conclusion
 
-We have developed a strict generalization of Pearl's structural causal models in which mechanisms — typed hyperedges — are first-class causal objects. The framework retains all of Pearl's expressive power and adds two new intervention operations: mechanism deletion and mechanism replacement. The principal formal claim is the asymmetry of Theorem T4 and its hidden-variable extension T6: mechanism-level interventions admit a *closed-form identifier* read directly from the chain-rule factorization, while variable interventions reduce to Pearl multi-variable ID on the bipartite blowup. Under v1 conventions both interventions are likely identifiable in concrete cases; the asymmetry is closed-form-vs-case-analytic, not identifiable-vs-not. Under hidden variables it sharpens — T6 closes the observed-boundary case cleanly, while only T7's boundary-violating case (governed by the hyper-hedge) can genuinely fail.
+We have developed a reformulation of Pearl's structural causal models in which mechanisms — typed hyperedges — are first-class causal objects. It is not a strict generalization and does not add expressive power: the framework is co-extensive with Pearl plus sufficient latents, its two intervention operations are $\sigma$-interventions of a restricted form, and under C1–C4 its identifiability results are corollaries of Tian-Pearl c-component factorization (Proposition T4.0) rather than independent theory. The principal formal claim is the asymmetry of Theorem T4 and its hidden-variable extension T6: mechanism-level interventions admit a *closed-form identifier* read directly from the chain-rule factorization, while variable interventions reduce to Pearl multi-variable ID on the bipartite blowup. Under v1 conventions both interventions are likely identifiable in concrete cases; the asymmetry is closed-form-vs-case-analytic, not identifiable-vs-not. Under hidden variables it sharpens — T6 closes the observed-boundary case cleanly, while only T7's boundary-violating case (governed by the hyper-hedge) can genuinely fail.
 
 The framework's value proposition is therefore not new expressive power but **first-class addressability**. Naming mechanisms as primary causal objects matches the structure of natural experiments (drug ablation, pathway knockout, n-ary policy intervention), simplifies the identifiability theory for those experiments, and unifies operations that Pearl can express only as multi-variable interventions or via latent-variable encoding.
 
@@ -396,6 +402,10 @@ Bongers, S., Forré, P., Peters, J., & Mooij, J. M. (2018). Foundations of struc
 
 Chien, E., Pan, C., Peng, J., & Milenkovic, O. (2022). You are AllSet: A multiset function framework for hypergraph neural networks. *ICLR 2022*.
 
+Correa, J., & Bareinboim, E. (2020). A calculus for stochastic interventions: Causal effect identification and surrogate experiments. *AAAI 34*.
+
+Eberhardt, F., & Scheines, R. (2007). Interventions and causal inference. *Philosophy of Science*, 74(5), 981–995.
+
 Feinberg, M. (2019). *Foundations of Chemical Reaction Network Theory*. Springer.
 
 Fritz, T. (2020). A synthetic approach to Markov kernels, conditional independence and theorems on sufficient statistics. *Advances in Mathematics*, 370, 107239.
@@ -414,6 +424,8 @@ Jumper, J., et al. (2021). Highly accurate protein structure prediction with Alp
 
 Kim, J., et al. (2022). Pure transformers are powerful graph learners. *NeurIPS 35*.
 
+Ma, J., Wan, M., Yang, L., Li, J., Hecht, B., & Teevan, J. (2022). Learning causal effects on hypergraphs. *KDD 2022*, 1202–1212.
+
 Murata, T. (1989). Petri nets: Properties, analysis and applications. *Proceedings of the IEEE*, 77(4), 541–580.
 
 Pearl, J. (2009). *Causality: Models, Reasoning, and Inference* (2nd ed.). Cambridge University Press.
@@ -422,11 +434,18 @@ Rubenstein, P. K., et al. (2017). Causal consistency of structural equation mode
 
 Shpitser, I., & Pearl, J. (2006). Identification of conditional interventional distributions. *UAI 22*.
 
+Shpitser, I., & Tchetgen Tchetgen, E. (2016). Causal inference with a graphical hierarchy of interventions. *Annals of Statistics*, 44(6), 2433–2466.
+
 Spirtes, P., Glymour, C., & Scheines, R. (2000). *Causation, Prediction, and Search* (2nd ed.). MIT Press.
+
+Tian, J., & Pearl, J. (2001). Causal discovery from changes. *UAI 17*, 512–521.
 
 Tian, J., & Pearl, J. (2002). A general identification condition for causal effects. *AAAI 18*.
 
+
 Verma, T., & Pearl, J. (1990). Causal networks: Semantics and expressiveness. *Uncertainty in Artificial Intelligence 4*.
+
+Yao, J., & Evans, R. J. (2022). Regression identifiability and edge interventions in linear structural equation models. *arXiv:2205.13432*.
 
 ---
 
