@@ -113,7 +113,11 @@ class _ChainModel:
         return self.TRANSITION[assignment[parent]][assignment[variable]]
 
     def fallback(
-        self, mechanism: str, variables: Sequence[str], assignment: Mapping[str, Any]
+        self,
+        mechanism: str,
+        variables: Sequence[str],
+        assignment: Mapping[str, Any],
+        marginalized: Sequence[str] = (),
     ) -> float:
         (variable,) = variables
         return self.policy[assignment[variable]]
@@ -155,10 +159,14 @@ class _CountingModel:
         return self._inner.conditional(variables, given, assignment)
 
     def fallback(
-        self, mechanism: str, variables: Sequence[str], assignment: Mapping[str, Any]
+        self,
+        mechanism: str,
+        variables: Sequence[str],
+        assignment: Mapping[str, Any],
+        marginalized: Sequence[str] = (),
     ) -> float:
         self.calls += 1
-        return self._inner.fallback(mechanism, variables, assignment)
+        return self._inner.fallback(mechanism, variables, assignment, marginalized)
 
     def conditional_expectation(
         self, target: str, given: Sequence[str], assignment: Mapping[str, Any]
@@ -503,7 +511,11 @@ def _fan_in_model(domains: Mapping[str, tuple[Any, ...]]) -> Any:
             return 0.5
 
         def fallback(
-            self, mechanism: str, variables: Sequence[str], assignment: Mapping[str, Any]
+            self,
+            mechanism: str,
+            variables: Sequence[str],
+            assignment: Mapping[str, Any],
+            marginalized: Sequence[str] = (),
         ) -> float:
             return 0.5
 

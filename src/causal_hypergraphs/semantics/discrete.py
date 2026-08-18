@@ -90,7 +90,11 @@ class Model(Protocol):
     ) -> float: ...
 
     def fallback(
-        self, mechanism: str, variables: Sequence[str], assignment: Assignment
+        self,
+        mechanism: str,
+        variables: Sequence[str],
+        assignment: Assignment,
+        marginalized: Sequence[str] = (),
     ) -> float: ...
 
     def conditional_expectation(
@@ -202,9 +206,18 @@ class DiscreteModel:
         return total
 
     def fallback(
-        self, mechanism: str, variables: Sequence[str], assignment: Assignment
+        self,
+        mechanism: str,
+        variables: Sequence[str],
+        assignment: Assignment,
+        marginalized: Sequence[str] = (),
     ) -> float:
         """``P0^mechanism(variables)`` evaluated at ``assignment``.
+
+        `marginalized` names outputs summed out of the declared joint. The sum runs over
+        the table's own keys rather than over a domain, which is the point: a policy over
+        a hidden output specifies that output's state space, so nothing else has to know
+        it exists.
 
         A missing table or a missing cell raises rather than defaulting. An absent cell in
         a joint policy is a specification error -- treating it as zero would silently
@@ -219,13 +232,36 @@ class DiscreteModel:
         missing = [v for v in variables if v not in assignment]
         if missing:
             raise SemanticsError(f"Assignment does not bind {missing}.")
-        key = tuple(assignment[v] for v in sorted(variables))
-        try:
-            return table[key]
-        except KeyError as exc:
+
+        if not marginalized:
+            key = tuple(assignment[v] for v in sorted(variables))
+            try:
+                return table[key]
+            except KeyError as exc:
+                raise MissingKernel(
+                    f"Fallback policy P0_{mechanism} has no entry for {key!r}."
+                ) from exc
+
+        outputs = sorted(tuple(variables) + tuple(marginalized))
+        position = {name: index for index, name in enumerate(outputs)}
+        wanted = [(position[v], assignment[v]) for v in variables]
+        total = 0.0
+        matched = False
+        for key, probability in table.items():
+            if len(key) != len(outputs):
+                raise MissingKernel(
+                    f"Fallback policy P0_{mechanism} is keyed by {len(key)}-tuples, but "
+                    f"the estimand marginalizes it over {list(outputs)}."
+                )
+            if all(key[index] == value for index, value in wanted):
+                total += probability
+                matched = True
+        if not matched:
             raise MissingKernel(
-                f"Fallback policy P0_{mechanism} has no entry for {key!r}."
-            ) from exc
+                f"Fallback policy P0_{mechanism} has no entry with "
+                f"{ {v: assignment[v] for v in variables} !r}."
+            )
+        return total
 
     def replacement(
         self, mechanism: str, variables: Sequence[str], given: Sequence[str], assignment: Assignment
@@ -275,7 +311,12 @@ def _(expression: ConditionalExpectation, model: Model, assignment: Assignment) 
 
 @evaluate.register
 def _(expression: Fallback, model: Model, assignment: Assignment) -> float:
-    return model.fallback(expression.mechanism, expression.variables, assignment)
+    return model.fallback(
+        expression.mechanism,
+        expression.variables,
+        assignment,
+        expression.marginalized,
+    )
 
 
 @evaluate.register

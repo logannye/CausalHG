@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from causal_hypergraphs.expression import Fallback, Product, SumOut
+from causal_hypergraphs.expression import Fallback, Probability, Product, SumOut
 from causal_hypergraphs.graph import MechanismGraph
 
 from .pearl_id import ADMG, PearlIDBackend, PearlIDQuery
 from .queries import DeleteMechanism, ReplaceMechanism
-from .results import Assumption, IdentificationResult, Identified, ProofStep, Unknown
+from .results import (
+    Assumption,
+    IdentificationResult,
+    Identified,
+    ProofStep,
+    Unidentified,
+    Unknown,
+)
 
 
 def variable_node(variable: str) -> str:
@@ -130,6 +137,35 @@ class StochasticInterventionReduction:
 
 
 @dataclass(frozen=True)
+class RelabellingWitness:
+    """Why deleting a mechanism with a hidden output identifies nothing.
+
+    `delete(m)` installs a policy over the *values* of `out(m)`. When one of those is a
+    variable the data never records, no observable pins down which value is which:
+    permuting a hidden variable's labels leaves every observed distribution exactly as it
+    was, and moves a policy defined on those labels. Two models compatible with the same
+    graph then agree on everything measurable and disagree on the answer, which is what
+    non-identifiability means.
+
+    The witness carries the hidden outputs being permuted and the nearest observed
+    variables they reach -- the reach is what makes the permutation observable *after* the
+    intervention while remaining invisible before it. With no such variable the deletion
+    cannot move any observable at all, and that case is identified rather than refused.
+    """
+
+    hidden_outputs: tuple[str, ...]
+    observed_descendants: tuple[str, ...]
+    explanation: str
+
+    def __str__(self) -> str:
+        return (
+            f"relabelling {list(self.hidden_outputs)} preserves every observed "
+            f"distribution and changes the post-deletion law of "
+            f"{list(self.observed_descendants)}"
+        )
+
+
+@dataclass(frozen=True)
 class HedgeWitness:
     """Pearl hedge witness returned by future non-identification paths."""
 
@@ -245,32 +281,67 @@ def latent_project(graph: MechanismGraph) -> BipartiteADMG:
 
 
 def latent_project_to_variable_admg(graph: MechanismGraph) -> ADMG:
-    """Project a mechanism graph to an observed-variable ADMG for Pearl backends.
+    """Project a mechanism graph to a Pearl ADMG over its observed variables.
 
-    This is intentionally conservative: directed edges come from observed inputs
-    to observed outputs of one mechanism, and bidirected edges come from hidden
-    variables that are direct inputs to mechanisms producing observed variables.
+    This is the standard latent projection (Pearl 2009 section 3.7), applied to the
+    bipartite blowup: over the observed variables, put `A -> B` when a directed path from
+    `A` to `B` has only latent interior nodes, and `A <-> B` when a latent node is a common
+    cause of both along paths with only latent interiors.
+
+    What makes the hypergraph case its own thing is *which* nodes are latent. A mechanism
+    is never observed -- data records variables, not the processes that produced them --
+    so every mechanism's noise `u_m` is a latent common parent of all of `out(m)`. Its
+    outputs are therefore confounded with each other. That is not an extra modelling
+    assumption bolted on here; it is the content of "outputs are produced jointly from one
+    shared noise", and it is what a variable-level DAG cannot express.
+
+    `THEOREM_T4_T5.md` Proposition T4.0 is the specification and the test: with no hidden
+    variables the districts of this graph must be exactly `{out(m)}` together with the
+    exogenous singletons. Its proof is the algorithm --
+
+        "Bidirected edges arise only by projecting out a mechanism noise `u_m`, whose
+        children are exactly `out(m)`; projection therefore yields a complete bidirected
+        component on `out(m)` and no bidirected edge with any endpoint outside it."
+
+    -- so the bidirected cliques are one per mechanism, each over the observed closure of
+    that mechanism's outputs, plus one per *exogenous* hidden variable, which has no
+    producing mechanism and so is a latent source in its own right. A hidden variable that
+    *is* produced needs no clique of its own: its noise is its producer's, and its closure
+    is already inside that mechanism's clique.
+
+    The `latent` flag on a mechanism plays no part. A mechanism node is unobserved either
+    way; the flag records that its functional form is unknown, which is a question about
+    estimation rather than about the graph.
     """
-
     observed = graph.observed_set
-    directed_edges: set[tuple[str, str]] = set()
-    hidden_children: dict[str, set[str]] = {variable: set() for variable in graph.hidden_variables}
+    produced = graph.produced_variables
 
-    for mechanism in graph.mechanisms.values():
-        observed_inputs = set(mechanism.inputs) & observed
-        observed_outputs = set(mechanism.outputs) & observed
-        for source in observed_inputs:
-            for target in observed_outputs:
-                if source != target:
+    consumers = graph.consumers()
+
+    directed_edges: set[tuple[str, str]] = set()
+    for source in sorted(observed):
+        for name in consumers.get(source, ()):
+            outputs = graph.get_mechanism(name).outputs
+            for target in graph.observed_closure(outputs):
+                if target != source:
                     directed_edges.add((source, target))
-        for hidden_input in set(mechanism.inputs) & graph.hidden_variables:
-            hidden_children.setdefault(hidden_input, set()).update(observed_outputs)
+
+    # One clique per latent source. Every mechanism is one, because `u_m` is never
+    # observed; an exogenous hidden variable is one, because nothing produces it.
+    cliques = [
+        graph.observed_closure(graph.get_mechanism(name).outputs)
+        for name in sorted(graph.mechanisms)
+    ]
+    cliques += [
+        graph.observed_closure((variable,))
+        for variable in sorted(graph.variable_set - observed - produced)
+    ]
 
     bidirected_edges: set[tuple[str, str]] = set()
-    for children in hidden_children.values():
-        ordered_children = sorted(children)
-        for index, left in enumerate(ordered_children):
-            for right in ordered_children[index + 1 :]:
+    for clique in cliques:
+        members = sorted(clique)
+        for index, left in enumerate(members):
+            for right in members[index + 1 :]:
                 bidirected_edges.add(_bidirected_edge((left, right)))
 
     return ADMG(
@@ -304,11 +375,137 @@ def reduce_mechanism_query_to_stochastic_intervention(
     )
 
 
+CORE_T7_ASSUMPTIONS = (
+    Assumption("C1", "Mechanism dependency graph is acyclic."),
+    Assumption("C2", "Mechanisms have independent exogenous noise."),
+    Assumption("C4", "Each variable has at most one producing mechanism."),
+)
+
 T7_ASSUMPTIONS = (
     Assumption("T7 reduction", "Boundary-violating mechanism query is reduced to Pearl ID."),
     Assumption("Stochastic deletion", "Mechanism deletion inserts fallback factors for outputs."),
     Assumption("Single-output target", "Current T7 vertical slice supports one target output."),
 )
+
+
+def _hidden_output_verdict(
+    graph: MechanismGraph,
+    query: DeleteMechanism,
+    hidden_outputs: tuple[str, ...],
+    missing_boundary: tuple[str, ...],
+) -> IdentificationResult:
+    """Settle `delete(m)` when some of `out(m)` is never observed.
+
+    Three outcomes, and none of them is "not implemented yet". Returning `Unknown` here --
+    which is what the T7 path did before, on the occasions it did not raise outright --
+    points the reader at an algorithm that cannot exist.
+
+    Two different reach questions are involved, and using one for the other is a genuine
+    error rather than a conservative approximation:
+
+    - *which hidden outputs can move an observation* decides the refusal. Those are the
+      ones whose relabelling is visible after the intervention and invisible before it, so
+      they are what the witness rests on. A hidden output that reaches nothing observed
+      cannot witness anything: permuting it changes no observable either way.
+    - *what the deletion can move at all* ranges over the whole of `out(m)`. A mechanism's
+      observed outputs are reset by the policy too, so a hidden dead-end sibling does not
+      make the deletion invisible. Answering `P(outcomes)` there is not cautious but wrong:
+      the observational law is precisely what the intervention changes.
+    """
+    target = graph.get_mechanism(query.target)
+
+    witnessing = tuple(
+        variable
+        for variable in hidden_outputs
+        if graph.observed_closure((variable,))
+    )
+    reached = tuple(sorted(graph.observed_closure(witnessing)))
+    moved = tuple(sorted(graph.observed_closure(target.outputs)))
+
+    boundary_step = ProofStep(
+        "Boundary check", f"Hidden boundary variables: {list(missing_boundary)}."
+    )
+
+    if witnessing:
+        return Unidentified(
+            reason=(
+                f"Deleting {query.target!r} installs a policy over {list(witnessing)}, "
+                "which are never observed. Relabelling them leaves every observed "
+                "distribution unchanged and changes the policy, so no formula in the "
+                "observed law can answer this."
+            ),
+            witness=RelabellingWitness(
+                hidden_outputs=witnessing,
+                observed_descendants=reached,
+                explanation=(
+                    "Two models agreeing on P(V_observed) and differing only by a "
+                    f"permutation of {list(witnessing)} give different post-deletion laws "
+                    f"for {list(reached)}. The argument needs the policy to distinguish "
+                    "the labels it permutes: a permutation-invariant policy, a uniform one "
+                    "for instance, is not covered, and `identify` never sees the policy's "
+                    "values, so this answers for a general policy."
+                ),
+            ),
+            assumptions=CORE_T7_ASSUMPTIONS,
+            derivation=(
+                boundary_step,
+                ProofStep(
+                    "Reach check",
+                    f"Hidden output(s) {list(witnessing)} reach observed {list(reached)}.",
+                ),
+                ProofStep(
+                    "Relabelling witness",
+                    "A permutation of the hidden output is a symmetry of the observed law "
+                    "and not of the intervention policy.",
+                ),
+            ),
+        )
+
+    if not moved:
+        return Identified(
+            expression=Probability(query.outcomes),
+            theorem="T7 (unreachable intervention)",
+            assumptions=CORE_T7_ASSUMPTIONS,
+            derivation=(
+                boundary_step,
+                ProofStep(
+                    "Reach check",
+                    f"No member of out({query.target}) = {list(target.outputs)} has an "
+                    "observed descendant, so no observable can respond to the deletion.",
+                ),
+                ProofStep(
+                    "Collapse",
+                    f"P({','.join(query.outcomes)} | delete({query.target})) = "
+                    f"P({','.join(query.outcomes)}). The estimand mentions neither the "
+                    "mechanism nor its policy, so it cannot depend on either.",
+                ),
+            ),
+        )
+
+    return Unknown(
+        reason=(
+            f"The policy for {query.target!r} is a joint over {list(target.outputs)}, of "
+            f"which {list(hidden_outputs)} are hidden dead ends. The answer needs that "
+            "policy's marginal over the observed outputs, which the compiler cannot form "
+            "without a domain for the hidden ones."
+        ),
+        next_algorithm="Marginalize the declared policy over its hidden outputs first.",
+        suggestions=(
+            f"Restate {query.target!r} with outputs "
+            f"{sorted(set(target.outputs) - set(hidden_outputs))} and supply the "
+            "already-marginalized policy.",
+        ),
+        missing_variables=hidden_outputs,
+        assumptions=CORE_T7_ASSUMPTIONS,
+        derivation=(
+            boundary_step,
+            ProofStep(
+                "Reach check",
+                f"Hidden output(s) {list(hidden_outputs)} reach nothing observed, but "
+                f"out({query.target}) as a whole reaches {list(moved)}.",
+            ),
+        ),
+    )
 
 
 def identify_delete_via_t7(
@@ -334,6 +531,23 @@ def identify_delete_via_t7(
             next_algorithm="Call DeleteMechanism(target, outcomes={...}).",
             missing_variables=missing_boundary,
         )
+    overlap = tuple(sorted(set(query.outcomes) & set(target.outputs)))
+    if overlap:
+        return Unknown(
+            reason=(
+                f"Outcomes {list(overlap)} are outputs of the mechanism being deleted, so "
+                "their post-intervention law is the policy supplied for it."
+            ),
+            next_algorithm="Ask about a downstream variable, or read the policy directly.",
+            missing_variables=overlap,
+        )
+
+    hidden_outputs = tuple(sorted(set(target.outputs) - observed))
+    if hidden_outputs:
+        return _hidden_output_verdict(
+            graph, query, hidden_outputs, missing_boundary
+        )
+
     if len(target.outputs) != 1:
         return Unknown(
             reason="Current T7 vertical slice supports one target output.",

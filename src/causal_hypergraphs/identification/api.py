@@ -62,8 +62,13 @@ def _observed(graph: MechanismGraph, observed_variables: object | None) -> froze
     return frozenset(str(v) for v in observed_variables)  # type: ignore[union-attr]
 
 
-def _theorem(graph: MechanismGraph, observed: frozenset[str], replacement: bool = False) -> str:
-    all_observed = observed == graph.variable_set
+def _theorem(
+    graph: MechanismGraph,
+    observed: frozenset[str],
+    replacement: bool = False,
+    variables: frozenset[str] | None = None,
+) -> str:
+    all_observed = observed == (graph.variable_set if variables is None else variables)
     has_latent_mechanisms = bool(graph.latent_mechanism_names)
     if replacement:
         if all_observed and not has_latent_mechanisms:
@@ -166,7 +171,15 @@ def _restrict_to_ancestry(
             f"P({','.join(outcomes)}).",
         )
 
-    summed = tuple(sorted(needed - set(outcomes)))
+    # Summed from what the retained factors actually mention, not from the closure. The
+    # two normally agree, and where they differ the closure is wrong: a variable no factor
+    # mentions contributes a bare `sum_v 1 = |domain(v)|`, which is a silent multiplicative
+    # error and needs a domain for a variable the estimand does not otherwise use. That
+    # happens exactly when an output was marginalized inside the policy factor.
+    mentioned: set[str] = set()
+    for factor in retained:
+        mentioned.update(factor.footprint())
+    summed = tuple(sorted(mentioned - set(outcomes)))
     reduced: Expression = Product(retained)
     if summed:
         reduced = SumOut(summed, reduced)
@@ -381,6 +394,17 @@ def _marginalize_quotient(
     return reduced, step
 
 
+def _removal_step(removable: tuple[str, ...], target: str) -> ProofStep:
+    """Record that a hidden output was summed out of the policy rather than estimated."""
+    return ProofStep(
+        "Marginalize the policy",
+        f"{list(removable)} are outputs of {target!r} that no observable depends on, so "
+        f"P0_{target} is summed over them inside the factor. The policy is declared over "
+        "every output, so this is a sum over a supplied table and not an estimated "
+        "quantity; the variables never enter the estimand's scope or its cost.",
+    )
+
+
 def _surviving_factors(graph: MechanismGraph, exclude: str) -> list[Probability]:
     """The mechanism-level chain-rule factors of P(V) that survive intervening on `exclude`.
 
@@ -446,7 +470,26 @@ def _identify_delete(
     target = graph.get_mechanism(query.target)
     _validate_outcomes(graph, query.outcomes)
     observed = _observed(graph, observed_variables)
-    missing_boundary = tuple(sorted(target.boundary - observed))
+
+    # A hidden output nothing consumes is not an obstruction. The caller supplies a joint
+    # policy over every output, so its marginal over the observed ones is a sum over a
+    # table already in hand -- the hidden coordinate's domain is part of the intervention,
+    # not something the data has to provide. Removing it from the boundary check is what
+    # turns the commonest hidden-boundary shape from a refusal into an answer.
+    #
+    # This is emphatically not true of a hidden output that *does* reach an observation:
+    # that one is unidentifiable, and `identify_delete_via_t7` says so with a witness.
+    removable = graph.removable_outputs(query.target, observed)
+    effective_variables = graph.variable_set - frozenset(removable)
+    if observed != effective_variables:
+        # The relaxation is sound only on the division-free route. With other hidden
+        # variables present the estimand becomes a quotient that *divides by* the target
+        # factor P(out(m) | in(m)), and that factor is not observable when any output is
+        # hidden -- removable or not. Omitting a factor and dividing by it are different
+        # operations, and only the first one tolerates an unobservable output.
+        removable = ()
+
+    missing_boundary = tuple(sorted(target.boundary - observed - frozenset(removable)))
     if missing_boundary:
         if allow_t7:
             return identify_delete_via_t7(graph, query, observed_variables)
@@ -456,10 +499,16 @@ def _identify_delete(
     if missing_fallback:
         return _unknown_fallback(query.target, missing_fallback)
 
-    theorem = _theorem(graph, observed, replacement=False)
+    theorem = _theorem(graph, observed, replacement=False, variables=effective_variables)
     # One joint policy over all orphaned outputs, not one per variable: deletion orphans
     # `out(m*)` simultaneously, and a per-variable product would force them independent.
-    fallbacks = [Fallback(query.target, target.outputs)]
+    # When every output is removable the policy is summed over its whole support, and a
+    # policy is a distribution, so the factor is identically one. Dropping it rather than
+    # emitting it is the same move the ancestral reduction makes on factors that sum to
+    # one -- and it is what lets the estimand say outright that the deletion cannot reach
+    # any observable, instead of multiplying by a 1 the reader has to verify.
+    installed = tuple(sorted(set(target.outputs) - frozenset(removable)))
+    fallbacks = [Fallback(query.target, installed, removable)] if installed else []
     common = CORE_ASSUMPTIONS + (
         Assumption(
             "P0",
@@ -475,7 +524,7 @@ def _identify_delete(
         "P(out(m) | in(m)) per mechanism.",
     )
 
-    if observed == graph.variable_set:
+    if observed == effective_variables:
         # Every chain-rule factor is an observational quantity, so the target factor can be
         # *omitted* rather than divided out. This keeps the estimand defined where that
         # factor is singular -- the generic case under C2 for a mechanism whose noise carries
@@ -505,7 +554,8 @@ def _identify_delete(
             expression=expression,
             theorem=theorem,
             assumptions=assumptions,
-            derivation=derivation,
+            derivation=derivation
+            + ((_removal_step(removable, query.target),) if removable else ()),
         )
 
     # Hidden variables are present. Surviving factors may reference them, so they are not

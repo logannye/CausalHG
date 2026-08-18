@@ -120,29 +120,52 @@ class Fallback(Expression):
     There is no `given`: deletion removes the mechanism, so `in(m)` no longer influences
     `out(m)`. A policy that still reads the inputs is a *replacement*, not a deletion, and
     belongs in `ReplacementFactor`.
+
+    `marginalized` names outputs summed out of the declared table *inside* this node, the
+    way `ConditionalExpectation` integrates its target. They are therefore neither free
+    nor bound: absent from `scope()` and from `footprint()`, with no domain required of
+    anyone. That is what lets a mechanism have a hidden output nothing consumes -- the
+    caller declared a policy over every output, so its marginal over the observed ones is
+    a sum over a supplied table, not a quantity the data has to provide. Leaving such a
+    variable free would hand the caller an estimand indexed by something never measured.
     """
 
     mechanism: str
     variables: tuple[str, ...]
+    marginalized: tuple[str, ...] = ()
 
-    def __init__(self, mechanism: str, variables: object) -> None:
+    def __init__(
+        self, mechanism: str, variables: object, marginalized: object = ()
+    ) -> None:
         object.__setattr__(self, "mechanism", str(mechanism))
         object.__setattr__(self, "variables", _items(variables))
+        object.__setattr__(self, "marginalized", _items(marginalized))
+
+    @property
+    def outputs(self) -> tuple[str, ...]:
+        """Every output the declared policy is a joint over, in table-key order."""
+        return tuple(sorted(self.variables + self.marginalized))
 
     def __str__(self) -> str:
-        return f"P0_{self.mechanism}({_join(self.variables)})"
+        table = f"P0_{self.mechanism}({_join(self.outputs)})"
+        if self.marginalized:
+            return f"sum_{{{_join(self.marginalized)}}} {table}"
+        return table
 
     def to_latex(self) -> str:
-        return rf"P_0^{{{self.mechanism}}}({_join(self.variables)})"
+        table = rf"P_0^{{{self.mechanism}}}({_join(self.outputs)})"
+        if self.marginalized:
+            return rf"\sum_{{{_join(self.marginalized)}}} {table}"
+        return table
 
     def scope(self) -> frozenset[str]:
         return frozenset(self.variables)
 
     def kernels(self) -> tuple[Kernel, ...]:
-        return (Kernel("fallback", f"P0_{self.mechanism}", self.variables),)
+        return (Kernel("fallback", f"P0_{self.mechanism}", self.outputs),)
 
     def canonical_key(self) -> tuple[Any, ...]:
-        return ("fallback", self.mechanism, self.variables)
+        return ("fallback", self.mechanism, self.variables, self.marginalized)
 
 
 @dataclass(frozen=True)
