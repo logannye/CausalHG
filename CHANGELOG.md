@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Unified finite hard/policy/delete/replace/composite queries, means, and paired effect contrasts.
+- Preserved joint-output marginal surgery and conservative hidden-variable identification statuses.
+- Added baseline-conditioned queries and complete-set DAG backdoor validation.
+- Added compiled estimand/result persistence, normalized replacement validation, and nested-integration resource guards.
+
 ## 0.3.0
 
 - Added immutable directed incidence and explicit causal model profiles.

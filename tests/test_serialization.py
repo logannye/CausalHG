@@ -85,3 +85,46 @@ def test_reject_unknown_type_version_and_fields():
     document["payload"]["type"] = "os.system"
     with pytest.raises(SerializationError):
         loads(json.dumps(document))
+
+
+def test_compiled_mean_contrast_round_trip_keeps_executable_ast():
+    from causal_hypergraphs import (
+        CausalQuery,
+        EffectContrast,
+        HardIntervention,
+        compile_query,
+        evaluate_query,
+    )
+    from causal_hypergraphs.semantics import DiscreteModel
+
+    graph = MechanismGraph({"X", "Y"}, {"m": {"inputs": {"X"}, "outputs": {"Y"}}})
+    query = EffectContrast(
+        CausalQuery(("Y",), HardIntervention({"X": 1}), kind="expectation"),
+        CausalQuery(("Y",), HardIntervention({"X": 0}), kind="expectation"),
+    )
+    compiled = compile_query(graph, query)
+    restored = loads(dumps(compiled))
+    model = DiscreteModel({"X": (0, 1), "Y": (0, 1)}, {(0, 0): 0.5, (1, 1): 0.5})
+    assert evaluate_query(restored, model) == evaluate_query(compiled, model) == {(): 1.0}
+
+
+def test_estimate_round_trip_retains_support_plan_and_query_label():
+    from causal_hypergraphs import (
+        CausalQuery,
+        Dataset,
+        HardIntervention,
+        compile_query,
+        estimate_query,
+    )
+
+    graph = MechanismGraph({"X", "Y"}, {"m": {"inputs": {"X"}, "outputs": {"Y"}}})
+    compiled = compile_query(graph, CausalQuery(("Y",), HardIntervention({"X": 1})))
+    estimated = estimate_query(compiled, Dataset.from_records([{"X": 0, "Y": 0}, {"X": 1, "Y": 1}]))
+    restored = loads(dumps(estimated))
+    assert restored == estimated
+    assert restored.summary() == estimated.summary()
+
+
+def test_duplicate_json_keys_are_rejected():
+    with pytest.raises(SerializationError):
+        loads('{"schema_version": 1, "schema_version": 2, "library_version": "1", "payload": 0}')

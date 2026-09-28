@@ -28,8 +28,12 @@ def _registry() -> dict[str, type]:
         "graph.model",
         "graph.incidence",
         "queries",
+        "inference",
+        "estimation.estimator",
+        "semantics.elimination",
         "expression.ast",
         "identification.queries",
+        "identification.adjustment",
         "identification.results",
         "identification.pearl_id",
         "identification.t7",
@@ -170,7 +174,16 @@ def dumps(value: Any, *, indent: int | None = None) -> str:
 def loads(text: str) -> Any:
     """Parse a supported JSON document. Unknown versions/types are rejected."""
     try:
-        document = json.loads(text)
+
+        def unique_object(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise SerializationError(f"Duplicate JSON key: {key}")
+                result[key] = value
+            return result
+
+        document = json.loads(text, object_pairs_hook=unique_object)
     except (ValueError, TypeError) as error:
         raise SerializationError("Invalid JSON.") from error
     if not isinstance(document, dict):

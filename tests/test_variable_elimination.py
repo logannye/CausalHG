@@ -858,6 +858,12 @@ def test_a_sparse_gene_network_is_affordable_near_the_intervention_and_not_far_f
         for parent in mechanism.inputs:
             children.setdefault(parent, []).extend(mechanism.outputs)
 
+    # The fixture's intended traversal follows increasing numeric generation order.
+    # MechanismGraph canonicalizes mapping IDs lexicographically; relying on that
+    # incidental iteration order chooses another path and can make min-fill enormous.
+    for successors in children.values():
+        successors.sort(key=lambda variable: int(variable.removeprefix("g")))
+
     domains = {name: BINARY for name in graph.variable_set}
     frontier = [graph.get_mechanism(target).outputs[0]]
     seen = set(frontier)

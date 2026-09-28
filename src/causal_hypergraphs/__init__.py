@@ -58,6 +58,8 @@ from .identification import (
     reduce_mechanism_query_to_stochastic_intervention,
     variable_node,
 )
+from .identification.adjustment import AdjustmentResult, validate_adjustment_set
+from .inference import CompiledQuery, compile_query, estimate_query, evaluate_query
 from .io import SCHEMA_VERSION, SerializationError, dumps, from_dict, loads, to_dict
 from .queries import (
     CausalQuery,
@@ -78,6 +80,8 @@ from .separation import (
 )
 
 __all__ = [
+    "AdjustmentResult", "validate_adjustment_set",
+    "CompiledQuery", "compile_query", "estimate_query", "evaluate_query",
     "INDEPENDENT_MECHANISMS", "CausalModelSpec", "DirectedHyperedge", "DirectedHypergraph",
     "UnsupportedModelError", "CausalQuery", "Composite", "Delete", "EffectContrast",
     "HardIntervention", "JointPolicy", "Replace", "validate_intervention",
