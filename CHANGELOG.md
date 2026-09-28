@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0
+
+- Added loss-aware native incidence, NetworkX bipartite, XGI directed, HyperNetX role, DataFrame, and array adapters with explicit identity mappings.
+- Added typed-package marker, wheel/source-distribution smoke checks outside the checkout, optional dependency groups, and Python 3.11–3.14/Linux/macOS/Windows CI.
+- Rewrote README and published API, interoperability, semantics, contribution/deprecation, release-validation and migration guides.
+- Retained exact resource budgets and published an independent finite backend performance example.
+
 ## 0.6.0
 
 - Added a typed optional continuous backend with joint affine kernels, analytic means, supported Gaussian baseline conditioning, and paired cluster-bootstrap uncertainty.

@@ -10,3 +10,6 @@ venv/
 
 # Untracked reference PDFs: read locally, never redistributed from this repository.
 *.pdf
+
+dist/
+build/

@@ -88,7 +88,7 @@ does not establish counterfactual identification from observational data.
 ## Persistence
 
 `causal_hypergraphs.io.dumps/loads` use a versioned, deterministic, data-only JSON
-envelope. Supported graphs, queries, expressions, and identification results preserve
+envelope. Supported graphs, queries, expressions, and identification/estimation results preserve
 tuple axes, joint policies, aliases, assumptions, and derivations. Unknown schemas,
 unregistered types, executable functions, and nonfinite numeric values are rejected.
 Executable models bind functions separately; deserialization never executes a
