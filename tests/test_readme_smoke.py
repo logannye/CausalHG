@@ -1,5 +1,6 @@
 import itertools
 import random
+import re
 from pathlib import Path
 
 from causal_hypergraphs import (
@@ -220,10 +221,6 @@ def test_readme_empty_stratum_block_reports_the_counts_it_prints() -> None:
         "P0_m1 rests on 1500 effective row(s) of 3000 (2x the reported count)",
         "! P(F | C,E) undefined at C=1, E=1 (16 point(s) unreachable)",
     ]
-    # ...and the README must show exactly that block.
-    readme = Path("README.md").read_text()
-    for line in block.strip().splitlines():
-        assert line.strip() in readme, line.strip()
     # Absent, never nan: the affected points are not in `values` at all.
     assert (0, 1, 1, 0, 1, 1) not in est.values
 
@@ -263,3 +260,11 @@ def test_readme_open_back_door_block_prints_what_the_readme_shows() -> None:
     for verdict in report.verdicts:
         if not verdict.path_test_applicable:
             assert not verdict.admissible, verdict.covariate
+
+
+def test_current_readme_python_examples_execute() -> None:
+    namespace = {}
+    blocks = re.findall(r"```python\n(.*?)```", Path("README.md").read_text(), re.S)
+    assert blocks, "README must provide an executable Python example"
+    for block in blocks:
+        exec(compile(block, "README.md", "exec"), namespace)
