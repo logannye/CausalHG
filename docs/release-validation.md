@@ -13,13 +13,14 @@ separation, hidden boundaries, support/alias failure cases, joint-output interve
 query composition, serialization, data contracts, numerical fitting, replay/counterfactual
 coupling, adapters, and execution budgets. Type-checking errors have been resolved.
 
-An integrated development run on Python 3.14.3/macOS passed 548 tests in 97 seconds.
-Additional adapter, serialization, and boundary regressions were added afterward; the
-GitHub checks on the final commit report the final count for each supported platform.
-The final quality checks include Ruff, Pyright, and a clean diff whitespace check.
+The final local run on Python 3.14.3/macOS passed all 582 tests in 95.02 seconds,
+including optional numerical and interoperability cases. Ruff and Pyright passed,
+and the diff whitespace check was clean. GitHub checks report each platform's counts,
+including skips where optional graph adapters are not installed.
 
-A wheel built from its source distribution installed into a fresh Python 3.11 environment
-with no optional dependencies, imported every module without importing NumPy, and passed
+The 1.0 wheel built from its source distribution installed in clean Python 3.11 and
+3.14 environments, including a 3.14 environment with no optional dependencies. It
+imported every module without importing NumPy and passed
 an end-to-end identify/estimate/serialize check plus all three installed domain examples
 from outside the checkout. The release workflow repeats installed-wheel and source-
 distribution checks and uploads both artifacts. Numerical and interoperability extras
