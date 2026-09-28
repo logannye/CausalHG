@@ -10,6 +10,6 @@ Baseline validation (Python 3.14.3, macOS): 352 passed, 1 xfailed in 39.30 secon
 | 0.3 | Complete | Immutable graph/model/query contracts, versioned JSON round trips, scoped hidden-output regression tests, clean Pyright |
 | 0.4 | Complete | 19 unified inference tests, 14 adjustment tests, persistence integration; independent semantic review corrected nested resource-budget handling |
 | 0.5 | Complete | 18 runtime tests including finite/Gaussian analytic checks, singular outputs, replay and coupling refusals; independent implementation review |
-| 0.6 | Pending | Statistical backends and continuous covariates |
+| 0.6 | Complete | Joint affine backend; categorical/continuous/mixed/clustered studies (100 initial and 300 confirmation datasets per population); independent reference intervals; finite-sample undercoverage explicitly documented |
 | 0.9 | Pending | Adapters, packaging, typing, release validation |
 | 1.0 | Pending | Independent review, stable contracts, GitHub checks |

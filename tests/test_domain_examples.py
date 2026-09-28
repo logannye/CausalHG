@@ -66,14 +66,15 @@ def test_time_expansion_preserves_feedback_edges_and_yields_an_exact_multistep_q
     simultaneous = MechanismGraph(
         variables={"x", "y", "readout"},
         mechanisms={
-            target: {"inputs": (source,), "outputs": (target,)} for source, target in edges
+            f"step_{target}": {"inputs": (source,), "outputs": (target,)}
+            for source, target in edges
         },
     )
-    refusal = identify(simultaneous, DeleteMechanism("x", outcomes=("readout",)))
+    refusal = identify(simultaneous, DeleteMechanism("step_x", outcomes=("readout",)))
     assert isinstance(refusal, Unknown)
 
     mechanisms = {
-        f"{target}_{step}": {
+        f"step_{target}_{step}": {
             "inputs": (f"{source}_{step - 1}",), "outputs": (f"{target}_{step}",),
         }
         for step in range(1, 4) for source, target in edges
@@ -86,11 +87,11 @@ def test_time_expansion_preserves_feedback_edges_and_yields_an_exact_multistep_q
     assert expanded.is_mechanism_acyclic()
     for step in range(1, 4):
         for source, target in edges:
-            mechanism = expanded.get_mechanism(f"{target}_{step}")
+            mechanism = expanded.get_mechanism(f"step_{target}_{step}")
             assert mechanism.inputs == (f"{source}_{step - 1}",)
             assert mechanism.outputs == (f"{target}_{step}",)
 
-    result = identify(expanded, DeleteMechanism("x_1", outcomes=("readout_3",)))
+    result = identify(expanded, DeleteMechanism("step_x_1", outcomes=("readout_3",)))
     assert isinstance(result, Identified)
     assert result.expression.footprint() == frozenset({"x_1", "y_2", "readout_3"})
     assert sum(kernel.kind == "probability" for kernel in result.expression.kernels()) == 2
@@ -103,7 +104,7 @@ def test_time_expansion_preserves_feedback_edges_and_yields_an_exact_multistep_q
         mass *= p_readout if readout else 1 - p_readout
         rows.extend({"x_1": x, "y_2": y, "readout_3": readout} for _ in range(int(mass * 80)))
     estimated = estimate(
-        result, Dataset.from_records(rows), fallbacks={"x_1": {(0,): 0.25, (1,): 0.75}},
+        result, Dataset.from_records(rows), fallbacks={"step_x_1": {(0,): 0.25, (1,): 0.75}},
     )
     # The assumed lagged process gives E[y_2]=1/4+(1/2)(3/4)=5/8,
     # then P(readout_3=1)=1/10+(4/5)(5/8)=3/5.

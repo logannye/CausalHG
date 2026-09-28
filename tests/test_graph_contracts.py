@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import pytest
 
-from causal_hypergraphs import DeleteMechanism, Identified, identify
+from causal_hypergraphs import DeleteMechanism, Identified, d_separated, identify
 from causal_hypergraphs.graph import (
     CausalModelSpec,
     DirectedHyperedge,
@@ -115,6 +115,16 @@ def test_generic_namespaces_do_not_silently_collapse_during_causal_conversion() 
     assert loads(dumps(graph)) == graph
     with pytest.raises(UnsupportedModelError, match="distinct node and mechanism IDs"):
         graph.to_mechanism_graph()
+
+
+def test_direct_mechanism_construction_cannot_merge_a_root_with_a_mechanism() -> None:
+    # X is an independent root; the sole causal relationship is Z -> Y.
+    graph = MechanismGraph(("X", "Y", "Z"), {"make_y": {"inputs": "Z", "outputs": "Y"}})
+    assert d_separated(graph, ("X",), ("Y",))
+    # Naming the mechanism X used to merge its bipartite vertex with root X,
+    # falsely connecting X and Y despite unchanged causal incidence.
+    with pytest.raises(ValueError, match="distinct node and mechanism IDs"):
+        MechanismGraph(("X", "Y", "Z"), {"X": {"inputs": "Z", "outputs": "Y"}})
 
 
 def test_legacy_mechanism_graph_inputs_are_snapshotted_and_read_only() -> None:

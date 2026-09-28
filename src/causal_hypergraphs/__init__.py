@@ -1,6 +1,15 @@
 """Mechanism-level causal identification over typed hypergraphs."""
 
-from .estimation import Dataset, Estimate, estimate
+from .estimation import (
+    ContinuousEstimate,
+    Dataset,
+    Estimate,
+    LinearGaussianFit,
+    LinearGaussianKernel,
+    estimate,
+    estimate_continuous,
+    fit_linear_gaussian,
+)
 from .expression import (
     ConditionalExpectation,
     Expression,
@@ -87,6 +96,11 @@ from .simulation import (
 )
 
 __all__ = [
+    "ContinuousEstimate",
+    "LinearGaussianFit",
+    "LinearGaussianKernel",
+    "estimate_continuous",
+    "fit_linear_gaussian",
     "FiniteKernel",
     "HypergraphSCM",
     "LinearGaussianMechanism",

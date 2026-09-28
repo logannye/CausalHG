@@ -119,9 +119,7 @@ def test_a_structural_function_cannot_mutate_the_saved_noise_during_replay() -> 
         noise[0] += 1
         return {"Y": noise[0]}
 
-    scm = HypergraphSCM(
-        graph, {"m": StructuralMechanism((), ("Y",), consume, lambda _rng: [10])}
-    )
+    scm = HypergraphSCM(graph, {"m": StructuralMechanism((), ("Y",), consume, lambda _rng: [10])})
     factual, noise = scm.sample_with_noise(seed=7)
     assert factual == {"Y": 11}
     assert noise.mechanisms["m"] == [10]
@@ -281,3 +279,21 @@ def test_scm_rejects_incomplete_bindings_and_cycles() -> None:
     )
     with pytest.raises(ValueError, match="acyclic"):
         HypergraphSCM(cyclic, {})
+
+
+def test_original_equalities_are_checked_before_surgery_but_can_change_under_replacement():
+    graph = MechanismGraph(
+        ("B", "C"), {"m": {"outputs": ("B", "C"), "output_equalities": (("B", "C"),)}}
+    )
+    invalid = StructuralMechanism((), ("B", "C"), lambda _x, _u: {"B": 0, "C": 1}, lambda _: None)
+    invalid_scm = HypergraphSCM(graph, {"m": invalid})
+    with pytest.raises(ValueError, match="output equality"):
+        invalid_scm.sample(seed=4)
+    with pytest.raises(ValueError, match="output equality"):
+        invalid_scm.sample(seed=4, intervention=HardIntervention({"B": 1}))
+    valid = StructuralMechanism((), ("B", "C"), lambda _x, _u: {"B": 0, "C": 0}, lambda _: None)
+    scm = HypergraphSCM(graph, {"m": valid})
+    assert scm.sample(seed=4, intervention=HardIntervention({"B": 1})) == [{"B": 1, "C": 0}]
+    assert scm.sample(seed=4, intervention=Replace("m", "new"), replacements={"new": invalid}) == [
+        {"B": 0, "C": 1}
+    ]

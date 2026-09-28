@@ -31,6 +31,7 @@ the next query to be a thousand times worse.
 from __future__ import annotations
 
 import itertools
+import math
 import random
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -286,6 +287,12 @@ class Estimate:
                     else ""
                 )
             )
+            unavailable = sum(bounds is None for bounds in self.interval.values())
+            if unavailable:
+                lines.append(
+                    f"  interval unavailable at {unavailable} point(s): fewer than two "
+                    "successful bootstrap draws"
+                )
         lines.append("")
         lines.append("  Not checked here -- asserted by the model, not testable from these data:")
         for assumption in self.support.not_checked:
@@ -448,7 +455,21 @@ def _thinnest_stratum(
     """
     smallest: int | None = None
     where: Mapping[str, Any] | None = None
-    for names, point in sorted(strata):
+    # A caller may declare an ordered domain of otherwise incomparable labels
+    # (for example numeric codes plus a string category). Diagnostic tie-breaking
+    # follows that domain order and must never compare the raw category objects.
+    positions = {
+        name: {value: index for index, value in enumerate(domain)}
+        for name, domain in model.domains.items()
+    }
+    ordered = sorted(
+        strata,
+        key=lambda item: (
+            item[0],
+            tuple(positions[name][value] for name, value in zip(item[0], item[1], strict=True)),
+        ),
+    )
+    for names, point in ordered:
         count = model.counts(names).get(point, 0)
         if smallest is None or count < smallest:
             smallest = count
@@ -616,7 +637,8 @@ def estimate(
         `DiscreteModel.replacements` expects.
     bootstrap:
         Number of unit-resampled replicates for the interval. Zero (the default) returns
-        a point estimate with no interval rather than a fake one.
+        a point estimate with no interval rather than a fake one. Intervals require at
+        least two independent sampling units and two successful draws at each point.
     method:
         `"eliminate"` (default) evaluates by variable elimination and costs the estimand's
         treewidth; `"enumerate"` walks the whole footprint and is the reference the fast
@@ -635,6 +657,16 @@ def estimate(
     these data. Points lost to an empty conditioning stratum are absent from `values` and
     described in `support.failures`.
     """
+    if not isinstance(bootstrap, int) or isinstance(bootstrap, bool) or bootstrap < 0:
+        raise ValueError("bootstrap must be a nonnegative integer.")
+    try:
+        valid_level = math.isfinite(level) and 0 < level < 1
+    except (TypeError, ValueError):
+        valid_level = False
+    if not valid_level:
+        raise ValueError("level must be strictly between zero and one.")
+    if bootstrap and data.n_units < 2:
+        raise DatasetError("Bootstrap uncertainty needs at least two independent sampling units.")
     evaluator = _evaluator(method, max_entries)
     identified = _as_identified(result)
     # Two different sets, and conflating them is a bug the marginal-query work exposed.
@@ -765,7 +797,7 @@ def _bootstrap_interval(
 
     A replicate can leave a stratum empty that was merely thin in the original sample. The
     affected point contributes no draw for that replicate and is counted; a point with no
-    surviving draws gets `None` rather than an interval computed from nothing. Both are
+    surviving draws, or only one, gets `None` rather than an unsupported interval. Both are
     reported, because a high failure rate says the point estimate is resting on very few
     rows -- which is the finding, not an inconvenience.
     """
@@ -791,7 +823,7 @@ def _bootstrap_interval(
     tail = (1.0 - level) / 2.0
     interval: dict[Point, tuple[float, float] | None] = {}
     for point, sample in draws.items():
-        if not sample:
+        if len(sample) < 2:
             interval[point] = None
             continue
         ordered = sorted(sample)

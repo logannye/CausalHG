@@ -1,0 +1,93 @@
+{
+  "cluster_units_per_dataset": 40,
+  "interpretation": "Independent comparison; not a calibrated-coverage release certificate.",
+  "nominal_coverage": 0.95,
+  "numpy": "2.5.3",
+  "populations": {
+    "categorical": {
+      "bias": 0.004561926515089909,
+      "coverage": 0.9233333333333333,
+      "coverage_exact_binomial_95_interval": [
+        0.8871818846395176,
+        0.9507812161243255
+      ],
+      "coverage_monte_carlo_se": 0.015361085995559135,
+      "covered": 277,
+      "empirical_standard_deviation": 0.06221776813467263,
+      "mean_reference_standard_error": 0.05835833564119666,
+      "method": "saturated influence-function asymptotic Wald interval",
+      "misses": 23,
+      "one_sided_p_for_undercoverage_of_095": 0.029182858472293436,
+      "truth": 0.3
+    },
+    "clustered": {
+      "bias": -0.007682566215577946,
+      "coverage": 0.94,
+      "coverage_exact_binomial_95_interval": [
+        0.9068297039280114,
+        0.9640561255848612
+      ],
+      "coverage_monte_carlo_se": 0.013711309200802093,
+      "covered": 282,
+      "empirical_standard_deviation": 0.17142904656104646,
+      "mean_reference_standard_error": 0.16553508168384204,
+      "method": "independent-unit homoskedastic OLS with exact Student t interval under this population",
+      "misses": 18,
+      "one_sided_p_for_undercoverage_of_095": 0.24673045084014344,
+      "truth": 2.0
+    },
+    "gaussian": {
+      "bias": -0.0031718228055372943,
+      "coverage": 0.9466666666666667,
+      "coverage_exact_binomial_95_interval": [
+        0.9148332350904858,
+        0.9692116802265219
+      ],
+      "coverage_monte_carlo_se": 0.012972906239401267,
+      "covered": 284,
+      "empirical_standard_deviation": 0.05340749439335777,
+      "mean_reference_standard_error": 0.051407309940048426,
+      "method": "independent-unit homoskedastic OLS with exact Student t interval under this population",
+      "misses": 16,
+      "one_sided_p_for_undercoverage_of_095": 0.4318879640725814,
+      "truth": 2.0
+    },
+    "mixed": {
+      "bias": 0.014469163036475052,
+      "coverage": 0.9433333333333334,
+      "coverage_exact_binomial_95_interval": [
+        0.910819595565837,
+        0.9666466884833155
+      ],
+      "coverage_monte_carlo_se": 0.013348602368232605,
+      "covered": 283,
+      "empirical_standard_deviation": 0.10895455422372358,
+      "mean_reference_standard_error": 0.10264633227113756,
+      "method": "independent-unit homoskedastic OLS with exact Student t interval under this population",
+      "misses": 17,
+      "one_sided_p_for_undercoverage_of_095": 0.3333609842141333,
+      "truth": 2.0
+    },
+    "null": {
+      "bias": -0.0014116566820697753,
+      "coverage": 0.9533333333333334,
+      "coverage_exact_binomial_95_interval": [
+        0.9229401618936413,
+        0.974255350532769
+      ],
+      "coverage_monte_carlo_se": 0.012177696674506891,
+      "covered": 286,
+      "empirical_standard_deviation": 0.051340322665798986,
+      "mean_reference_standard_error": 0.0513727336606181,
+      "method": "independent-unit homoskedastic OLS with exact Student t interval under this population",
+      "misses": 14,
+      "one_sided_p_for_undercoverage_of_095": 0.6417113878457213,
+      "truth": 0.0
+    }
+  },
+  "python": "3.14.3",
+  "replicates": 300,
+  "rows_per_dataset": 400,
+  "scipy": "1.18.1",
+  "seed": 73192026
+}

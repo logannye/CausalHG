@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- Added a typed optional continuous backend with joint affine kernels, analytic means, supported Gaussian baseline conditioning, and paired cluster-bootstrap uncertainty.
+- Hardened finite and continuous input contracts: missing/nonfinite values, invalid sampling units, ragged finite tables, invalid domains and bootstrap controls are rejected.
+- Published categorical, Gaussian, mixed, clustered, null and misspecified simulation studies, including unfavorable coverage results and independent interval references.
+- Preserved joint residual dependence and singular output covariance; rejected rank-deficient designs and unsupported conditional mixtures.
+- Corrected direct graph identifier collisions that could corrupt separation, and validated declared executable output equalities.
+
 ## 0.5.0
 
 - Added public executable SCMs, finite joint kernels, custom structural functions, and optional linear-Gaussian mechanisms.

@@ -137,3 +137,12 @@ def test_noise_record_round_trip_preserves_provenance():
         {"X": 1}, {"m": (0.5, -1.2)}, intervention=Composite((HardIntervention({"Y": 0}),))
     )
     assert loads(dumps(record)) == record
+
+
+def test_continuous_estimate_round_trip_is_data_only():
+    from causal_hypergraphs import CausalQuery, HardIntervention, fit_linear_gaussian
+
+    graph = MechanismGraph({"X", "Y"}, {"m": {"inputs": {"X"}, "outputs": {"Y"}}})
+    fitted = fit_linear_gaussian(graph, [{"X": x, "Y": 1 + 2 * x} for x in range(8)])
+    result = fitted.estimate(CausalQuery(("Y",), HardIntervention({"X": 2}), kind="expectation"))
+    assert loads(dumps(result)) == result

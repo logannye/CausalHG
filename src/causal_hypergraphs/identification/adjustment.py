@@ -96,6 +96,8 @@ def validate_adjustment_set(
                     state="structurally_checked",
                 ),
             )
+        elif status == "unsupported":
+            assumptions = ()
         return AdjustmentResult(
             status, code, reason, x, y, z, descendants, connected, assumptions=assumptions
         )

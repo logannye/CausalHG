@@ -567,6 +567,24 @@ class HypergraphSCM:
             # User structural functions may consume a mutable noise payload. Each
             # evaluation gets its own copy so replay cannot mutate the saved draw.
             outputs = binding.evaluate(inputs, copy.deepcopy(noise.mechanisms[name]))
+            if binding is self.mechanisms[name]:
+                # Original equalities apply before componentwise surgery. A new
+                # replacement function need not preserve the original equalities.
+                for group in self.graph.get_mechanism(name).output_equalities:
+                    if len(group) < 2:
+                        continue
+                    reference = outputs[group[0]]
+                    for variable in group[1:]:
+                        value = outputs[variable]
+                        equal = (
+                            math.isclose(reference, value, rel_tol=1e-9, abs_tol=1e-9)
+                            if isinstance(reference, int | float) and isinstance(value, int | float)
+                            else reference == value
+                        )
+                        if not equal:
+                            raise ValueError(
+                                f"Mechanism {name!r} violates declared output equality {group}."
+                            )
             values.update({variable: outputs[variable] for variable in retained})
         return {name: values[name] for name in self.graph.variables}
 

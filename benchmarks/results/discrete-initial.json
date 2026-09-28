@@ -1,0 +1,18 @@
+{
+  "bias": -0.006256092849103223,
+  "bootstrap": 99,
+  "coverage": 0.87,
+  "coverage_monte_carlo_se": 0.03363034344160047,
+  "failed_bootstrap_refits": 0,
+  "failed_intervals": 0,
+  "passes": true,
+  "replicates": 100,
+  "seed": 20260928,
+  "sparse_support_negative_control_passes": true,
+  "thresholds_declared_before_run": {
+    "absolute_bias_max": 0.05,
+    "coverage_min": 0.85,
+    "failed_intervals_max": 0
+  },
+  "truth": 0.3
+}

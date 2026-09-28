@@ -28,6 +28,7 @@ def _registry() -> dict[str, type]:
         "graph.model",
         "graph.incidence",
         "queries",
+        "io.adapters",
         "inference",
         "estimation.estimator",
         "semantics.elimination",
@@ -53,6 +54,9 @@ def _registry() -> dict[str, type]:
                 result[f"{name}.{cls.__name__}"] = cls
     from causal_hypergraphs.simulation import NoiseRecord
     result["simulation.NoiseRecord"] = NoiseRecord
+    from causal_hypergraphs.estimation.continuous import ContinuousCapabilities, ContinuousEstimate
+    result["estimation.continuous.ContinuousCapabilities"] = ContinuousCapabilities
+    result["estimation.continuous.ContinuousEstimate"] = ContinuousEstimate
     return result
 
 

@@ -18,7 +18,7 @@ def main() -> dict:
         variables={"batch", "length", "strength", "inspection", "shipped"},
         mechanisms={
             "shaping": {"inputs": ("batch",), "outputs": ("length", "strength")},
-            "inspection": {"inputs": ("length", "strength"), "outputs": ("inspection",)},
+            "inspection_step": {"inputs": ("length", "strength"), "outputs": ("inspection",)},
             "shipping": {"inputs": ("inspection",), "outputs": ("shipped",)},
         },
     )

@@ -111,8 +111,9 @@ class MechanismGraph:
     a mechanism deletion would orphan an output without an intervention policy.
 
     Inputs are copied and normalized. Stored identifiers are nonempty strings, incidence axes
-    are sorted tuples, and the mechanism mapping is immutable. Cycles are valid structure;
-    each inference algorithm checks its own acyclicity requirements.
+    are sorted tuples, and the mechanism mapping is immutable. Mechanism IDs must be
+    distinct from variable IDs for the compiler's bipartite representation. Cycles are valid
+    structure; each inference algorithm checks its own acyclicity requirements.
     """
 
     variables: tuple[str, ...]
@@ -202,6 +203,13 @@ class MechanismGraph:
         var_set = set(self.variables)
         observed = set(self.observed_variables)
         fallback = set(self.fallback_variables)
+        collisions = var_set & set(self.mechanisms)
+        if collisions:
+            raise ValueError(
+                "The mechanism compiler requires distinct node and mechanism IDs for its "
+                f"bipartite representation; rename these mechanism IDs explicitly: "
+                f"{sorted(collisions)}"
+            )
 
         if not observed <= var_set:
             missing = sorted(observed - var_set)
