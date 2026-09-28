@@ -1,0 +1,77 @@
+{
+  "bootstrap": 399,
+  "nominal_coverage": 0.95,
+  "nonlinear_assumption_sensitivity": [
+    {
+      "bias": -0.0036263552905161055,
+      "quadratic_coefficient": 0.0,
+      "truth": 4.6
+    },
+    {
+      "bias": -0.480970362428652,
+      "quadratic_coefficient": 0.25,
+      "truth": 5.41
+    },
+    {
+      "bias": -0.958314369566787,
+      "quadratic_coefficient": 0.5,
+      "truth": 6.22
+    },
+    {
+      "bias": -1.9130023838430577,
+      "quadratic_coefficient": 1.0,
+      "truth": 7.84
+    }
+  ],
+  "nonlinear_negative_control_passes": true,
+  "numpy": "2.4.1",
+  "passes": true,
+  "populations": {
+    "clustered": {
+      "bias": -0.007682566215577946,
+      "coverage": 0.9133333333333333,
+      "coverage_monte_carlo_se": 0.01624351722539955,
+      "failed_bootstrap_refits": 0,
+      "failed_intervals": 0,
+      "passes": true,
+      "truth": 2.0
+    },
+    "gaussian": {
+      "bias": -0.0031718228055372943,
+      "coverage": 0.9333333333333333,
+      "coverage_monte_carlo_se": 0.014401645996461909,
+      "failed_bootstrap_refits": 0,
+      "failed_intervals": 0,
+      "passes": true,
+      "truth": 2.0
+    },
+    "mixed": {
+      "bias": 0.014469163036475052,
+      "coverage": 0.94,
+      "coverage_monte_carlo_se": 0.013711309200802093,
+      "failed_bootstrap_refits": 0,
+      "failed_intervals": 0,
+      "passes": true,
+      "truth": 2.0
+    },
+    "null": {
+      "bias": -0.0014116566820697677,
+      "coverage": 0.9533333333333334,
+      "coverage_monte_carlo_se": 0.012177696674506891,
+      "failed_bootstrap_refits": 0,
+      "failed_intervals": 0,
+      "passes": true,
+      "truth": 0.0
+    }
+  },
+  "python": "3.14.6",
+  "replicates": 300,
+  "seed": 73192026,
+  "thresholds_declared_before_run": {
+    "absolute_bias_max": 0.15,
+    "coverage_max": 1.0,
+    "coverage_min": 0.85,
+    "failed_intervals_max": 0,
+    "nonlinear_absolute_bias_min": 1.3
+  }
+}

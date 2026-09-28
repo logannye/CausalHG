@@ -1,6 +1,15 @@
 """Mechanism-level causal identification over typed hypergraphs."""
 
-from .estimation import Dataset, Estimate, estimate
+from .estimation import (
+    ContinuousEstimate,
+    Dataset,
+    Estimate,
+    LinearGaussianFit,
+    LinearGaussianKernel,
+    estimate,
+    estimate_continuous,
+    fit_linear_gaussian,
+)
 from .expression import (
     ConditionalExpectation,
     Expression,
@@ -13,7 +22,15 @@ from .expression import (
     ReplacementFactor,
     SumOut,
 )
-from .graph import Mechanism, MechanismGraph
+from .graph import (
+    INDEPENDENT_MECHANISMS,
+    CausalModelSpec,
+    DirectedHyperedge,
+    DirectedHypergraph,
+    Mechanism,
+    MechanismGraph,
+    UnsupportedModelError,
+)
 from .identification import (
     ADMG,
     Assumption,
@@ -50,6 +67,19 @@ from .identification import (
     reduce_mechanism_query_to_stochastic_intervention,
     variable_node,
 )
+from .identification.adjustment import AdjustmentResult, validate_adjustment_set
+from .inference import CompiledQuery, compile_query, estimate_query, evaluate_query
+from .io import SCHEMA_VERSION, SerializationError, dumps, from_dict, loads, to_dict
+from .queries import (
+    CausalQuery,
+    Composite,
+    Delete,
+    EffectContrast,
+    HardIntervention,
+    JointPolicy,
+    Replace,
+    validate_intervention,
+)
 from .semantics import plan_elimination
 from .separation import (
     DeterminationRule,
@@ -57,8 +87,50 @@ from .separation import (
     d_separated,
     deterministic_closure,
 )
+from .simulation import (
+    FiniteKernel,
+    HypergraphSCM,
+    LinearGaussianMechanism,
+    NoiseRecord,
+    StructuralMechanism,
+)
 
 __all__ = [
+    "ContinuousEstimate",
+    "LinearGaussianFit",
+    "LinearGaussianKernel",
+    "estimate_continuous",
+    "fit_linear_gaussian",
+    "FiniteKernel",
+    "HypergraphSCM",
+    "LinearGaussianMechanism",
+    "NoiseRecord",
+    "StructuralMechanism",
+    "AdjustmentResult",
+    "validate_adjustment_set",
+    "CompiledQuery",
+    "compile_query",
+    "estimate_query",
+    "evaluate_query",
+    "INDEPENDENT_MECHANISMS",
+    "CausalModelSpec",
+    "DirectedHyperedge",
+    "DirectedHypergraph",
+    "UnsupportedModelError",
+    "CausalQuery",
+    "Composite",
+    "Delete",
+    "EffectContrast",
+    "HardIntervention",
+    "JointPolicy",
+    "Replace",
+    "validate_intervention",
+    "SCHEMA_VERSION",
+    "SerializationError",
+    "dumps",
+    "from_dict",
+    "loads",
+    "to_dict",
     "ADMG",
     "Assumption",
     "BipartiteADMG",

@@ -1,5 +1,9 @@
 # Foundations of Causal Hypergraphs (v0.1)
 
+> Research/reference document. The [1.0 capability matrix](docs/capabilities.md),
+> [semantics guide](docs/semantics.md), and [public API](docs/api.md) define the shipped library.
+
+
 This document fixes the formal substrate. Three conventions are committed in v1; alternatives are catalogued in §11.
 
 ---

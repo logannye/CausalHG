@@ -1,13 +1,11 @@
-import pytest
-
 from causal_hypergraphs import (
     BipartiteADMG,
     DeleteMechanism,
     HedgeWitness,
     HyperHedgeWitness,
-    Identified,
     StochasticInterventionReduction,
     T7ReductionPlaceholder,
+    Unknown,
     build_bipartite_dag,
     identify,
     identify_via_t7,
@@ -93,8 +91,7 @@ def test_identify_via_t7_records_reduction_context_when_available() -> None:
     )
 
 
-@pytest.mark.xfail(reason="T7 Pearl-ID reduction is a future milestone.")
-def test_t7_todo_boundary_violating_case_eventually_identifies_when_possible() -> None:
+def test_legacy_hidden_boundary_requires_explicit_supported_reduction() -> None:
     result = identify(hidden_variable_graph(), DeleteMechanism("m_2"))
-
-    assert isinstance(result, Identified)
+    assert isinstance(result, Unknown)
+    assert result.reason

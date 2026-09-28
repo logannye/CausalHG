@@ -5,6 +5,19 @@ This package answers it *from a dataset*, and -- because positivity is a propert
 distribution rather than of the graph -- checks the certificates the formula carries
 against the data actually in hand, naming the strata where they fail.
 """
+from .continuous import (
+    ContinuousBackend,
+    ContinuousCapabilities,
+    ContinuousDataError,
+    ContinuousError,
+    ContinuousEstimate,
+    LinearGaussianFit,
+    LinearGaussianKernel,
+    RankDeficientFit,
+    UnsupportedContinuousQuery,
+    estimate_continuous,
+    fit_linear_gaussian,
+)
 from .dataset import Dataset, DatasetError, Point
 from .empirical import EmpiricalModel
 from .estimator import (
@@ -22,6 +35,18 @@ from .estimator import (
 )
 
 __all__ = [
+    "ContinuousBackend",
+    "ContinuousCapabilities",
+    "ContinuousDataError",
+    "ContinuousError",
+    "ContinuousEstimate",
+    "LinearGaussianFit",
+    "LinearGaussianKernel",
+    "RankDeficientFit",
+    "UnsupportedContinuousQuery",
+    "estimate_continuous",
+    "fit_linear_gaussian",
+
     "DISCHARGEABLE_CODES",
     "METHODS",
     "Dataset",

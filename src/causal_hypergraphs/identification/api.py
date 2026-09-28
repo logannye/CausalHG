@@ -23,10 +23,10 @@ from .results import (
 from .t7 import identify_delete_via_t7
 
 CORE_ASSUMPTIONS = (
-    Assumption("C1", "Mechanism dependency graph is acyclic."),
+    Assumption("C1", "Mechanism dependency graph is acyclic.", "structurally_checked"),
     Assumption("C2", "Mechanisms have independent exogenous noise."),
-    Assumption("C3", "Mechanisms use input/output role typing."),
-    Assumption("C4", "Each variable has at most one producing mechanism."),
+    Assumption("C3", "Mechanisms use input/output role typing.", "structurally_checked"),
+    Assumption("C4", "Each variable has at most one producing mechanism.", "structurally_checked"),
 )
 
 
@@ -115,6 +115,7 @@ def _core_assumptions(graph: MechanismGraph) -> tuple[Assumption, ...]:
             "The mechanism graph is cyclic, but no mechanism on a cycle supplies a kernel "
             "this query needs. Lemma 1.1 is applied only to the query's own ancestral "
             "closure, which is acyclic.",
+            "structurally_checked",
         )
         if item.code == "C1"
         else item

@@ -153,13 +153,12 @@ def test_a_name_shared_by_a_mechanism_and_a_variable_raises() -> None:
     leave every covariate looking admissible for a reason that has nothing to do with the
     covariate -- the failure mode where a guard runs, passes, and cannot fire.
     """
-    graph = MechanismGraph(
-        variables={"target", "x", "y"},
-        mechanisms={"target": {"inputs": ("x",), "outputs": ("y",)}},
-    )
-
-    with pytest.raises(ValueError, match="both a mechanism and a variable"):
-        check_covariates(graph, DeleteMechanism("target"), "y", ["x"])
+    # Reject the ambiguity at construction, before any diagnostic can use it.
+    with pytest.raises(ValueError, match="distinct node and mechanism IDs"):
+        MechanismGraph(
+            variables={"target", "x", "y"},
+            mechanisms={"target": {"inputs": ("x",), "outputs": ("y",)}},
+        )
 
 
 def test_replacement_queries_are_checked_the_same_way() -> None:

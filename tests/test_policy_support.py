@@ -101,6 +101,7 @@ def test_a_policy_below_the_estimability_floor_fails_the_gate() -> None:
 
     (policy,) = estimated.policy
     assert policy.effective_n == pytest.approx(13.3, abs=0.5)
+    assert policy.effective_n is not None
     assert policy.effective_n < policy.floor
     assert not policy.holds
     assert "Policy support: FAIL" in estimated.summary()

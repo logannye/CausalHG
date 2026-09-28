@@ -1,5 +1,9 @@
 # Causal Hypergraph SCMs: A First-Class Calculus for Mechanism-Level Intervention
 
+> Research/reference document. The [1.0 capability matrix](docs/capabilities.md),
+> [semantics guide](docs/semantics.md), and [public API](docs/api.md) define the shipped library.
+
+
 ---
 
 ## Abstract

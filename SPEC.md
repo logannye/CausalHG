@@ -1,5 +1,9 @@
 # Mechanism Intervention Compiler Specification
 
+> Research/reference document. The [1.0 capability matrix](docs/capabilities.md),
+> [semantics guide](docs/semantics.md), and [public API](docs/api.md) define the shipped library.
+
+
 This document specifies the public semantics of the v1 mechanism intervention
 compiler. It is intentionally narrower than the full research program: when the
 current compiler cannot justify an estimand from the stated assumptions, it must

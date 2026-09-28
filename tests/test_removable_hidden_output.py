@@ -159,7 +159,9 @@ def test_one_consumer_of_the_hidden_output_flips_the_verdict() -> None:
         },
         observed_variables={"A", "C", "Y", "Z"},
     )
-    result = identify(graph, DeleteMechanism("m1", outcomes={"Y"}), allow_t7=True)
+    # The new consumer must belong to the requested outcome: an obstruction for Z
+    # cannot refute identification of Y, whose only ancestor here is observed C.
+    result = identify(graph, DeleteMechanism("m1", outcomes={"Y", "Z"}), allow_t7=True)
 
     assert isinstance(result, Unidentified), result
 

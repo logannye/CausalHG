@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Literal
 
 from causal_hypergraphs.expression import Expression
 
@@ -10,6 +12,18 @@ from causal_hypergraphs.expression import Expression
 class Assumption:
     code: str
     description: str
+    state: Literal["declared", "structurally_checked", "empirically_assessed", "unresolved"] = (
+        "declared"
+    )
+
+    def __post_init__(self) -> None:
+        if self.state not in {
+            "declared",
+            "structurally_checked",
+            "empirically_assessed",
+            "unresolved",
+        }:
+            raise ValueError(f"Unknown assumption state: {self.state}")
 
     def __str__(self) -> str:
         return f"{self.code}: {self.description}"
@@ -45,6 +59,9 @@ class Identified(IdentificationResult):
     Empty for every estimand that needs no copy, which is most of them.
     """
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "aliases", MappingProxyType(dict(self.aliases)))
+
 
 @dataclass(frozen=True)
 class Unknown(IdentificationResult):
@@ -55,6 +72,7 @@ class Unknown(IdentificationResult):
     assumptions: tuple[Assumption, ...] = ()
     derivation: tuple[ProofStep, ...] = ()
     status: str = "unknown"
+    reason_code: str = "unsupported_query"
 
 
 @dataclass(frozen=True)
@@ -64,3 +82,4 @@ class Unidentified(IdentificationResult):
     assumptions: tuple[Assumption, ...] = ()
     derivation: tuple[ProofStep, ...] = ()
     status: str = "unidentified"
+    reason_code: str = "nonidentification_witness"

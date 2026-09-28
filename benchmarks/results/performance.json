@@ -1,0 +1,61 @@
+{
+  "python": "3.14.3",
+  "platform": "macOS-26.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "backend": "independent symmetric finite-chain Model",
+  "cases": [
+    {
+      "nodes": 10,
+      "hyperedges": 9,
+      "max_arity": 2,
+      "cardinality": 2,
+      "induced_width": 1,
+      "max_entries": 4,
+      "enumeration_assignments": 512,
+      "expression_characters": 211,
+      "seconds": 0.0016564999241381884,
+      "peak_traced_bytes": 32381,
+      "answer": 0.5
+    },
+    {
+      "nodes": 40,
+      "hyperedges": 39,
+      "max_arity": 2,
+      "cardinality": 2,
+      "induced_width": 1,
+      "max_entries": 4,
+      "enumeration_assignments": 549755813888,
+      "expression_characters": 871,
+      "seconds": 0.00861633406020701,
+      "peak_traced_bytes": 71240,
+      "answer": 0.5
+    },
+    {
+      "nodes": 100,
+      "hyperedges": 99,
+      "max_arity": 2,
+      "cardinality": 2,
+      "induced_width": 1,
+      "max_entries": 4,
+      "enumeration_assignments": 633825300114114700748351602688,
+      "expression_characters": 2191,
+      "seconds": 0.03662025020457804,
+      "peak_traced_bytes": 149516,
+      "answer": 0.5
+    },
+    {
+      "nodes": 40,
+      "hyperedges": 39,
+      "max_arity": 2,
+      "cardinality": 4,
+      "induced_width": 1,
+      "max_entries": 16,
+      "enumeration_assignments": 302231454903657293676544,
+      "expression_characters": 871,
+      "seconds": 0.011796458158642054,
+      "peak_traced_bytes": 66272,
+      "answer": 0.25
+    }
+  ],
+  "wide_factor_resource_guard": true
+}

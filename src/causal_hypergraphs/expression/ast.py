@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,6 +10,8 @@ def _items(values: object) -> tuple[str, ...]:
         return ()
     if isinstance(values, str):
         return (values,)
+    if not isinstance(values, Iterable):
+        raise TypeError("Expected an iterable of variable names.")
     return tuple(sorted(str(v) for v in values))
 
 
@@ -248,6 +251,9 @@ class MechanismFactor(Expression):
 
 @dataclass(frozen=True)
 class ReplacementFactor(MechanismFactor):
+    def __init__(self, mechanism: str, variables: object, given: object = ()) -> None:
+        super().__init__(mechanism, variables, given)
+
     def kernels(self) -> tuple[Kernel, ...]:
         return (Kernel("replacement", self.mechanism, self.variables, self.given),)
 
