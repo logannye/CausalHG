@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0 — 2026-09-28
+
+- Established the documented 1.x graph, model, query, result, simulation, serialization, and estimator contracts.
+- Completed the library-focused milestone sequence and retained the original application in the archive tag.
+- Cross-reviewed supported semantics using independent finite/analytic oracles and published the findings.
+- Release gates include lint/types, the full suite, Python/OS CI, installed wheel/source artifacts, runnable examples, and candid statistical validation reports.
+- Known limits: percentile-bootstrap intervals can under-cover in finite samples; general correlated-noise, multiple-producer, cyclic and counterfactual-identification extensions remain outside the stable profiles.
+
 ## 0.9.0
 
 - Added loss-aware native incidence, NetworkX bipartite, XGI directed, HyperNetX role, DataFrame, and array adapters with explicit identity mappings.

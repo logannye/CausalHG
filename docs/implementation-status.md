@@ -1,6 +1,6 @@
 # Implementation status
 
-Baseline: db56c051c24be66304265973d3fa29bb187cf211. The active implementation is on codex/general-purpose-1.0.
+Baseline: db56c051c24be66304265973d3fa29bb187cf211. The release was developed on `codex/general-purpose-1.0`. This table records completed implementation gates; GitHub checks and the release tag record publication.
 
 Baseline validation (Python 3.14.3, macOS): 352 passed, 1 xfailed in 39.30 seconds; Ruff passed. Pyright reported 26 pre-existing errors. Editable installation succeeded after rebuilding the installation.
 
@@ -12,4 +12,4 @@ Baseline validation (Python 3.14.3, macOS): 352 passed, 1 xfailed in 39.30 secon
 | 0.5 | Complete | 18 runtime tests including finite/Gaussian analytic checks, singular outputs, replay and coupling refusals; independent implementation review |
 | 0.6 | Complete | Joint affine backend; categorical/continuous/mixed/clustered studies (100 initial and 300 confirmation datasets per population); independent reference intervals; finite-sample undercoverage explicitly documented |
 | 0.9 | Complete | 12 adapter tests including seeded round trips; wheel built from sdist and installed on Python 3.11 outside checkout; all modules remain lightweight; typing and cross-platform/artifact CI configured |
-| 1.0 | Pending | Independent review, stable contracts, GitHub checks |
+| 1.0 | Complete | Stable documented contracts; independent agent cross-review; preserved statistical studies; 1.0 wheel/sdist build and clean Python 3.11/3.14 installations. GitHub CI gates merge and publication. |
