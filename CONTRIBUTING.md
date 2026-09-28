@@ -6,7 +6,7 @@ Use Python 3.11 or newer. Install an editable checkout with optional dependencie
 python -m pip install -e ".[dev,numerical,interop]"
 python -m pytest -q
 python -m ruff check .
-python -m pyright --pythonpath python
+python scripts/check_types.py
 python -m build
 ```
 
