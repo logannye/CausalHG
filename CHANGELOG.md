@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- Added public executable SCMs, finite joint kernels, custom structural functions, and optional linear-Gaussian mechanisms.
+- Added seeded observational/intervention sampling, replayable noise records, and validated replacement bindings.
+- Added scoped hard-intervention counterfactuals with preserved co-output noise; stochastic kernels require explicit coupling.
+- Independent review closed a replay bypass of counterfactual coupling requirements.
+
 ## 0.4.0
 
 - Unified finite hard/policy/delete/replace/composite queries, means, and paired effect contrasts.

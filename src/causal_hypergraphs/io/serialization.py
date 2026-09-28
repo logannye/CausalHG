@@ -51,6 +51,8 @@ def _registry() -> dict[str, type]:
         for cls in vars(module).values():
             if isinstance(cls, type) and is_dataclass(cls) and cls.__module__ == module_name:
                 result[f"{name}.{cls.__name__}"] = cls
+    from causal_hypergraphs.simulation import NoiseRecord
+    result["simulation.NoiseRecord"] = NoiseRecord
     return result
 
 

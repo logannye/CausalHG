@@ -128,3 +128,12 @@ def test_estimate_round_trip_retains_support_plan_and_query_label():
 def test_duplicate_json_keys_are_rejected():
     with pytest.raises(SerializationError):
         loads('{"schema_version": 1, "schema_version": 2, "library_version": "1", "payload": 0}')
+
+
+def test_noise_record_round_trip_preserves_provenance():
+    from causal_hypergraphs import Composite, HardIntervention, NoiseRecord
+
+    record = NoiseRecord(
+        {"X": 1}, {"m": (0.5, -1.2)}, intervention=Composite((HardIntervention({"Y": 0}),))
+    )
+    assert loads(dumps(record)) == record
