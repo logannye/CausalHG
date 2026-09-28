@@ -14,11 +14,20 @@ def _ordered(values: object) -> tuple[str, ...]:
         return ()
     if isinstance(values, str):
         return (values,)
-    return tuple(sorted(str(v) for v in values))
+    if not isinstance(values, Iterable):
+        raise TypeError("Expected an iterable of variable names.")
+    names = tuple(values)
+    if any(not isinstance(v, str) or not v.strip() for v in names):
+        raise TypeError("ADMG identifiers must be nonempty strings.")
+    if len(set(names)) != len(names):
+        raise ValueError("Duplicate ADMG identifiers.")
+    return tuple(sorted(names))
 
 
 def _bidirected_edge(edge: tuple[str, str]) -> tuple[str, str]:
     left, right = edge
+    if not all(isinstance(v, str) and v.strip() for v in (left, right)):
+        raise TypeError("ADMG edge identifiers must be nonempty strings.")
     if left == right:
         raise ValueError("Bidirected self-edges are not allowed.")
     return tuple(sorted((str(left), str(right))))  # type: ignore[return-value]
@@ -40,7 +49,10 @@ class ADMG:
     ) -> None:
         node_tuple = _ordered(nodes)
         node_set = set(node_tuple)
-        directed = tuple(sorted((str(a), str(b)) for a, b in directed_edges))
+        raw_directed = tuple(directed_edges)
+        if any(not isinstance(v, str) or not v.strip() for edge in raw_directed for v in edge):
+            raise TypeError("ADMG edge identifiers must be nonempty strings.")
+        directed = tuple(sorted(set(raw_directed)))
         bidirected = tuple(sorted({_bidirected_edge(edge) for edge in bidirected_edges}))
         for source, target in directed:
             if source == target:
@@ -49,9 +61,7 @@ class ADMG:
                 raise ValueError(f"Directed edge {source!r}->{target!r} references unknown node.")
         for left, right in bidirected:
             if left not in node_set or right not in node_set:
-                raise ValueError(
-                    f"Bidirected edge {left!r}<->{right!r} references unknown node."
-                )
+                raise ValueError(f"Bidirected edge {left!r}<->{right!r} references unknown node.")
         object.__setattr__(self, "nodes", node_tuple)
         object.__setattr__(self, "directed_edges", directed)
         object.__setattr__(self, "bidirected_edges", bidirected)
@@ -152,9 +162,7 @@ class ADMG:
         with the conditioning set removed.
         """
         conditioning = set(_ordered(given))
-        latents = {
-            f"__u{index}": edge for index, edge in enumerate(self.bidirected_edges)
-        }
+        latents = {f"__u{index}": edge for index, edge in enumerate(self.bidirected_edges)}
         parents: dict[str, set[str]] = {node: set() for node in self.nodes}
         parents.update({name: set() for name in latents})
         for origin, destination in self.directed_edges:
@@ -248,10 +256,9 @@ PEARL_ASSUMPTIONS = (
 class PearlIDBackend:
     """Small isolated Pearl-ID backend.
 
-    This backend is intentionally conservative. It identifies base observational
-    queries, Markovian truncated-factorization queries, and the canonical
-    front-door pattern. Other cases return `Unidentified` with a witness-like
-    explanation instead of fabricating a formula.
+    Implements the complete Shpitser-Pearl ID recursion for variable interventions
+    in a semi-Markovian ADMG. Failure returns an applicable hedge witness; a
+    mechanism-model reduction must separately justify transporting that witness.
     """
 
     def identify(self, graph: ADMG, query: PearlIDQuery) -> IdentificationResult:

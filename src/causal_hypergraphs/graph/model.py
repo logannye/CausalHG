@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+import hashlib
+import json
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 
@@ -9,17 +12,39 @@ def _ordered(values: object) -> tuple[str, ...]:
     if values is None:
         return ()
     if isinstance(values, str):
-        return (values,)
-    return tuple(sorted(str(v) for v in values))
+        return (_identifier(values),)
+    if not isinstance(values, Iterable):
+        raise TypeError("Identifiers must be an iterable of nonempty strings.")
+    names = tuple(_identifier(value) for value in values)
+    if len(set(names)) != len(names):
+        raise ValueError("Duplicate identifiers are not valid incidence entries.")
+    return tuple(sorted(names))
+
+
+def _identifier(value: object) -> str:
+    """Validate native IDs without coercing distinct external IDs to one string."""
+    if not isinstance(value, str):
+        raise TypeError("Identifiers must be nonempty strings; convert external IDs explicitly.")
+    if not value or not value.strip():
+        raise ValueError("Identifiers must be nonempty strings.")
+    return value
+
+
+def _fingerprint(value: object) -> str:
+    """A process-independent digest of a canonical, JSON-compatible payload."""
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _normalize_equalities(groups: object) -> tuple[tuple[str, ...], ...]:
     if groups is None:
         return ()
-    return tuple(_ordered(group) for group in groups)  # type: ignore[arg-type]
+    if isinstance(groups, str) or not isinstance(groups, Iterable):
+        raise TypeError("Output equalities must be an iterable of identifier groups.")
+    return tuple(sorted(_ordered(group) for group in groups))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class Mechanism:
     """Pure typed incidence for one mechanism.
 
@@ -33,14 +58,25 @@ class Mechanism:
     latent: bool = False
     output_equalities: tuple[tuple[str, ...], ...] = ()
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "name", str(self.name))
-        object.__setattr__(self, "inputs", _ordered(self.inputs))
-        object.__setattr__(self, "outputs", _ordered(self.outputs))
-        object.__setattr__(self, "output_equalities", _normalize_equalities(self.output_equalities))
+    def __init__(
+        self,
+        name: str,
+        inputs: Iterable[str] | str = (),
+        outputs: Iterable[str] | str = (),
+        latent: bool = False,
+        output_equalities: Iterable[Iterable[str] | str] = (),
+    ) -> None:
+        if not isinstance(latent, bool):
+            raise TypeError("Mechanism latent status must be a boolean.")
+        object.__setattr__(self, "name", _identifier(name))
+        object.__setattr__(self, "inputs", _ordered(inputs))
+        object.__setattr__(self, "outputs", _ordered(outputs))
+        object.__setattr__(self, "latent", latent)
+        object.__setattr__(self, "output_equalities", _normalize_equalities(output_equalities))
 
     @classmethod
     def from_spec(cls, name: str, spec: Mechanism | Mapping[str, Any]) -> Mechanism:
+        name = _identifier(name)
         if isinstance(spec, Mechanism):
             if spec.name != name:
                 return cls(
@@ -51,11 +87,13 @@ class Mechanism:
                     output_equalities=spec.output_equalities,
                 )
             return spec
+        if not isinstance(spec, Mapping):
+            raise TypeError("A mechanism specification must be a Mechanism or a mapping.")
         return cls(
             name=name,
             inputs=_ordered(spec.get("inputs", ())),
             outputs=_ordered(spec.get("outputs", ())),
-            latent=bool(spec.get("latent", False)),
+            latent=spec.get("latent", False),
             output_equalities=_normalize_equalities(spec.get("output_equalities", ())),
         )
 
@@ -64,40 +102,70 @@ class Mechanism:
         return frozenset(self.inputs) | frozenset(self.outputs)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class MechanismGraph:
     """Typed mechanism hypergraph used by the identification compiler.
 
-    `fallback_variables=None` means every variable has a named fallback distribution `P0(v)`.
+    `fallback_variables=None` declares symbolic joint fallback coverage for every mechanism.
     Passing an explicit set makes fallback policy strict, which lets callers force refusal when
     a mechanism deletion would orphan an output without an intervention policy.
+
+    Inputs are copied and normalized. Stored identifiers are nonempty strings, incidence axes
+    are sorted tuples, and the mechanism mapping is immutable. Cycles are valid structure;
+    each inference algorithm checks its own acyclicity requirements.
     """
 
-    variables: object
-    mechanisms: Mapping[str, Mechanism | Mapping[str, Any]]
-    observed_variables: object | None = None
-    fallback_variables: object | None = None
-    assumptions: frozenset[str] = field(default_factory=frozenset)
+    variables: tuple[str, ...]
+    mechanisms: Mapping[str, Mechanism]
+    observed_variables: tuple[str, ...]
+    fallback_variables: tuple[str, ...]
+    assumptions: frozenset[str]
 
-    def __post_init__(self) -> None:
-        variables = _ordered(self.variables)
-        mechanisms = {
-            str(name): Mechanism.from_spec(str(name), spec)
-            for name, spec in self.mechanisms.items()
+    def __init__(
+        self,
+        variables: Iterable[str] | str,
+        mechanisms: Mapping[str, Mechanism | Mapping[str, Any]],
+        observed_variables: Iterable[str] | str | None = None,
+        fallback_variables: Iterable[str] | str | None = None,
+        assumptions: Iterable[str] = frozenset(),
+    ) -> None:
+        ordered_variables = _ordered(variables)
+        if not isinstance(mechanisms, Mapping):
+            raise TypeError("Mechanisms must be a mapping from string IDs to specifications.")
+        normalized = {
+            _identifier(name): Mechanism.from_spec(name, spec)
+            for name, spec in mechanisms.items()
         }
-        observed = (
-            variables if self.observed_variables is None else _ordered(self.observed_variables)
-        )
-        fallback = (
-            variables if self.fallback_variables is None else _ordered(self.fallback_variables)
-        )
+        observed = ordered_variables if observed_variables is None else _ordered(observed_variables)
+        fallback = ordered_variables if fallback_variables is None else _ordered(fallback_variables)
 
-        object.__setattr__(self, "variables", variables)
-        object.__setattr__(self, "mechanisms", mechanisms)
+        object.__setattr__(self, "variables", ordered_variables)
+        object.__setattr__(self, "mechanisms", MappingProxyType(dict(sorted(normalized.items()))))
         object.__setattr__(self, "observed_variables", observed)
         object.__setattr__(self, "fallback_variables", fallback)
+        object.__setattr__(self, "assumptions", frozenset(_ordered(assumptions)))
 
         self.validate()
+
+    def fingerprint(self) -> str:
+        """Stable content identity, including observation and policy declarations."""
+        return _fingerprint([
+            "MechanismGraph-v1",
+            self.variables,
+            [
+                [name, m.inputs, m.outputs, m.latent, m.output_equalities]
+                for name, m in self.mechanisms.items()
+            ],
+            self.observed_variables,
+            self.fallback_variables,
+            sorted(self.assumptions),
+        ])
+
+    def __hash__(self) -> int:
+        return hash((
+            self.variables, tuple(self.mechanisms.items()), self.observed_variables,
+            self.fallback_variables, self.assumptions,
+        ))
 
     @property
     def variable_set(self) -> frozenset[str]:
@@ -172,13 +240,9 @@ class MechanismGraph:
             detail = ", ".join(f"{v}: {names}" for v, names in sorted(duplicates.items()))
             raise ValueError(f"C4 violation: variables with multiple producers ({detail})")
 
-        # C1 is deliberately NOT enforced here. Acyclicity is a property a *query* needs,
-        # not one the object needs to exist: Lemma 1.1's proof uses it only for the
-        # sub-system it is applied to, so a cycle somewhere else in the graph is
-        # irrelevant to a question that cannot reach it. Enforcing it at construction made
-        # a twenty-thousand-gene network with one feedback loop wholly unavailable --
-        # nothing about any part of it could be asked -- and most regulatory networks have
-        # a loop. `identify` checks the closure of the query instead, and refuses there.
+        # C1 is a query condition, not a construction-time restriction. An unrelated
+        # feedback component must not prevent queries whose required kernels are acyclic.
+        # `identify` checks the relevant closure and records semantic assumptions.
 
     def get_mechanism(self, name: str) -> Mechanism:
         try:
@@ -257,9 +321,8 @@ class MechanismGraph:
 
         Indexed by variable rather than by comparing every pair of mechanisms. Both give
         the same edges, but this runs in the number of incidences instead of the square of
-        the number of mechanisms -- and since every graph validates acyclicity at
-        construction, the difference is the cost of *loading* a network at all. A
-        20,000-mechanism graph is seconds one way and tens of seconds the other.
+        the number of mechanisms. Construction does not call this method; algorithms
+        request dependency information only when they need it.
         """
         consumers: dict[str, list[str]] = {}
         for name, mechanism in self.mechanisms.items():

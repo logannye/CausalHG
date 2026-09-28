@@ -13,6 +13,7 @@ discharge. What is not permitted is an estimand that cannot be evaluated while r
 no such certificate -- that is an undisclosed requirement, and it is exactly the defect
 this harness exists to prevent from recurring.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -33,17 +34,13 @@ MODEL_COUNT = 220
 # Assumptions whose failure legitimately makes an estimand unevaluable. `Backend positivity`
 # is the T7/Pearl branch's form of the same certificate; this sweep does not enable T7, but
 # the predicate must not go stale relative to what the compiler can emit.
-POSITIVITY_CODES = frozenset(
-    {"Target positivity", "Downstream positivity", "Backend positivity"}
-)
+POSITIVITY_CODES = frozenset({"Target positivity", "Downstream positivity", "Backend positivity"})
 
 
 def _discrete_model(model: RandomModel, target: str, *, with_replacement: bool) -> DiscreteModel:
     """Build the evaluation model over the *observed* variables only."""
     joint = model.marginalize_to_observed(model.joint())
-    replacements = (
-        {f"{target}_prime": model.replacement_table(target)} if with_replacement else {}
-    )
+    replacements = {f"{target}_prime": model.replacement_table(target)} if with_replacement else {}
     return DiscreteModel(
         domains=model.observed_domains,
         joint=joint,
@@ -88,7 +85,9 @@ def sweep() -> dict[str, int]:
             replacement = f"{spec.name}_prime"
 
             # (query, exact law, uses a replacement kernel, points to check, is marginal)
-            cases: list[tuple[object, dict, bool, tuple[str, ...], bool]] = [
+            cases: list[
+                tuple[DeleteMechanism | ReplaceMechanism, dict, bool, tuple[str, ...], bool]
+            ] = [
                 (DeleteMechanism(spec.name), delete_truth, False, model.observed, False),
                 (
                     ReplaceMechanism(spec.name, replacement),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from causal_hypergraphs.expression import Fallback, Probability, Product, SumOut
@@ -196,6 +197,8 @@ def _ordered(values: object) -> tuple[str, ...]:
         return ()
     if isinstance(values, str):
         return (values,)
+    if not isinstance(values, Iterable):
+        raise TypeError("Expected an iterable of variable names.")
     return tuple(sorted(str(v) for v in values))
 
 
@@ -432,6 +435,7 @@ def _hidden_output_verdict(
       the observational law is precisely what the intervention changes.
     """
     target = graph.get_mechanism(query.target)
+    requested = frozenset(query.outcomes)
 
     # A hidden output witnesses non-identifiability only if relabelling it is a legal
     # transformation of a model over this graph. `output_equalities` declares that a
@@ -448,15 +452,18 @@ def _hidden_output_verdict(
     witnessing = tuple(
         variable
         for variable in hidden_outputs
-        if graph.observed_closure((variable,)) and variable not in pinned
+        if graph.observed_closure((variable,), requested) and variable not in pinned
     )
     withdrawn = tuple(
         variable
         for variable in hidden_outputs
-        if graph.observed_closure((variable,)) and variable in pinned
+        if graph.observed_closure((variable,), requested) and variable in pinned
     )
-    reached = tuple(sorted(graph.observed_closure(witnessing)))
-    moved = tuple(sorted(graph.observed_closure(target.outputs)))
+    # Reach must be query-specific, and pass through intermediate observed variables.
+    # A hidden output that changes some other measurement cannot witness failure of
+    # identification for an unaffected requested outcome.
+    reached = tuple(sorted(graph.observed_closure(witnessing, requested)))
+    moved = tuple(sorted(graph.observed_closure(target.outputs, requested)))
 
     boundary_step = ProofStep(
         "Boundary check", f"Hidden boundary variables: {list(missing_boundary)}."
@@ -533,7 +540,7 @@ def _hidden_output_verdict(
                 ProofStep(
                     "Reach check",
                     f"No member of out({query.target}) = {list(target.outputs)} has an "
-                    "observed descendant, so no observable can respond to the deletion.",
+                    "requested descendant, so no requested outcome can respond to the deletion.",
                 ),
                 ProofStep(
                     "Collapse",
@@ -547,7 +554,8 @@ def _hidden_output_verdict(
     return Unknown(
         reason=(
             f"The policy for {query.target!r} is a joint over {list(target.outputs)}, of "
-            f"which {list(hidden_outputs)} are hidden dead ends. The answer needs that "
+            f"which {list(hidden_outputs)} cannot reach the requested outcomes. "
+            "The answer needs that "
             "policy's marginal over the observed outputs, which the compiler cannot form "
             "without a domain for the hidden ones."
         ),
@@ -563,7 +571,7 @@ def _hidden_output_verdict(
             boundary_step,
             ProofStep(
                 "Reach check",
-                f"Hidden output(s) {list(hidden_outputs)} reach nothing observed, but "
+                f"Hidden output(s) {list(hidden_outputs)} reach no requested outcome, but "
                 f"out({query.target}) as a whole reaches {list(moved)}.",
             ),
         ),
@@ -604,12 +612,6 @@ def identify_delete_via_t7(
             missing_variables=overlap,
         )
 
-    hidden_outputs = tuple(sorted(set(target.outputs) - observed))
-    if hidden_outputs:
-        return _hidden_output_verdict(
-            graph, query, hidden_outputs, missing_boundary
-        )
-
     unknown_outcomes = set(query.outcomes) - observed
     if unknown_outcomes:
         return Unknown(
@@ -619,6 +621,11 @@ def identify_delete_via_t7(
                 for variable in sorted(unknown_outcomes)
             ),
             missing_variables=tuple(sorted(unknown_outcomes)),
+        )
+    hidden_outputs = tuple(sorted(set(target.outputs) - observed))
+    if hidden_outputs:
+        return _hidden_output_verdict(
+            graph, query, hidden_outputs, missing_boundary
         )
     missing_fallback = graph.missing_fallback_variables(query.target)
     if missing_fallback:
